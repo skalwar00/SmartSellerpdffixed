@@ -2,6 +2,16 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
+import PDFParser from "pdf2json";
+
+function parsePDFBuffer(buffer: Buffer): Promise<ReturnType<PDFParser["getRawTextContent"]> extends never ? never : any> {
+  return new Promise((resolve, reject) => {
+    const pdfParser = new PDFParser();
+    pdfParser.on("pdfParser_dataReady", (data: any) => resolve(data));
+    pdfParser.on("pdfParser_dataError", (err: any) => reject(err));
+    pdfParser.parseBuffer(buffer);
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,36 +32,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ Vercel-safe buffer
-    const buffer = new Uint8Array(await file.arrayBuffer());
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const pdfData = await parsePDFBuffer(buffer);
 
-    // ❌ DO NOT use workerSrc on Vercel
-
-    const pdf = await pdfjsLib.getDocument({
-      data: buffer,
-    }).promise;
+    // pdf2json divides PDF point coordinates by 9.6 — multiply back to restore
+    // the same coordinate scale as pdfjs-dist so all thresholds stay identical.
+    const SCALE = 9.6;
 
     const ordersMap = new Map<string, number>();
 
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
+    const pages: any[] = pdfData.Pages ?? [];
 
-      const items = content.items as Array<{
-        str: string;
-        transform: number[];
-      }>;
+    for (const page of pages) {
+      const texts: any[] = page.Texts ?? [];
+
+      // Reconstruct items in the same shape as pdfjs-dist's getTextContent()
+      const items = texts.flatMap((textItem: any) =>
+        (textItem.R ?? []).map((run: any) => ({
+          str: decodeURIComponent(run.T),
+          transform: [
+            0, 0, 0, 0,
+            Math.round(textItem.x * SCALE),
+            Math.round(textItem.y * SCALE),
+          ],
+        }))
+      );
 
       const pageText = items.map((it) => it.str).join(" ").toUpperCase();
 
-      // Page filter
+      // Page filter — unchanged
       if (!pageText.includes("PICKLIST") || pageText.includes("COURIER")) {
         continue;
       }
 
-      // Row grouping by Y axis
+      // Row grouping by Y axis — unchanged
       const rowMap: Map<number, Array<{ x: number; text: string }>> = new Map();
 
       for (const item of items) {
@@ -107,12 +123,11 @@ export async function POST(req: NextRequest) {
 
         const fullSku = `${styleCode}-${size}`;
 
-        // ✅ FAST aggregation using Map
         ordersMap.set(fullSku, (ordersMap.get(fullSku) || 0) + qty);
       }
     }
 
-    // Convert to array
+    // Convert to array — unchanged
     const orders = Array.from(ordersMap.entries()).map(
       ([Portal_SKU, Qty]) => ({
         Portal_SKU,
