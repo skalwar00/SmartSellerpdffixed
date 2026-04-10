@@ -2,7 +2,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
-import path from "path";
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,29 +9,31 @@ export async function POST(req: NextRequest) {
     const file = formData.get("file") as File;
 
     if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      return NextResponse.json(
+        { error: "No file provided" },
+        { status: 400 }
+      );
     }
 
-    const buffer = await file.arrayBuffer();
+    if (!file.type.includes("pdf")) {
+      return NextResponse.json(
+        { error: "Only PDF allowed" },
+        { status: 400 }
+      );
+    }
+
+    // ✅ Vercel-safe buffer
+    const buffer = new Uint8Array(await file.arrayBuffer());
 
     const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-      "pdfjs-dist/legacy/build/pdf.worker.mjs",
-      import.meta.url
-    ).href;
-
-    const standardFontDataUrl = path.join(
-      process.cwd(),
-      "node_modules/pdfjs-dist/standard_fonts/"
-    );
+    // ❌ DO NOT use workerSrc on Vercel
 
     const pdf = await pdfjsLib.getDocument({
       data: buffer,
-      standardFontDataUrl: `file://${standardFontDataUrl}`,
     }).promise;
 
-    const orders: { Portal_SKU: string; Qty: number }[] = [];
+    const ordersMap = new Map<string, number>();
 
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
@@ -43,80 +44,88 @@ export async function POST(req: NextRequest) {
         transform: number[];
       }>;
 
-      // Page filter: must contain "PICKLIST" and must NOT contain "COURIER"
       const pageText = items.map((it) => it.str).join(" ").toUpperCase();
+
+      // Page filter
       if (!pageText.includes("PICKLIST") || pageText.includes("COURIER")) {
         continue;
       }
 
-      // Group text items into rows by y-coordinate (within 5pt = same row)
+      // Row grouping by Y axis
       const rowMap: Map<number, Array<{ x: number; text: string }>> = new Map();
 
       for (const item of items) {
-        if (!item.str.trim()) continue;
+        if (!item.str?.trim()) continue;
+
         const x = Math.round(item.transform[4]);
         const y = Math.round(item.transform[5]);
 
-        let rowKey: number | null = null;
+        let matchedKey: number | null = null;
+
         for (const key of rowMap.keys()) {
-          if (Math.abs(key - y) <= 5) {
-            rowKey = key;
+          if (Math.abs(key - y) <= 6) {
+            matchedKey = key;
             break;
           }
         }
-        if (rowKey === null) {
+
+        if (matchedKey === null) {
           rowMap.set(y, []);
-          rowKey = y;
+          matchedKey = y;
         }
-        rowMap.get(rowKey)!.push({ x, text: item.str.trim() });
+
+        rowMap.get(matchedKey)!.push({
+          x,
+          text: item.str.trim(),
+        });
       }
 
-      // Sort rows top-to-bottom, cells left-to-right within each row
       const sortedRows = [...rowMap.entries()]
         .sort((a, b) => b[0] - a[0])
-        .map(([, cells]) => cells.sort((a, b) => a.x - b.x).map((c) => c.text));
+        .map(([, cells]) =>
+          cells.sort((a, b) => a.x - b.x).map((c) => c.text)
+        );
 
       for (const row of sortedRows) {
-        // Need at least 3 columns: SKU | ... | Size | Qty
         if (row.length < 3) continue;
 
-        // Skip the header row where first cell is "SKU"
-        if (row[0].toUpperCase().trim() === "SKU") continue;
+        if (row[0]?.toUpperCase().trim() === "SKU") continue;
 
-        // row[0]  = style code (e.g. "HS005-GREEN")
-        // row[-2] = size      (e.g. "XXL")
-        // row[-1] = quantity  (e.g. "1")
-        const styleCode = row[0].toUpperCase().trim();
-        const size = row[row.length - 2].toUpperCase().trim();
+        const styleCode = row[0]?.toUpperCase().trim();
+        const size = row[row.length - 2]?.toUpperCase().trim();
         const qtyRaw = row[row.length - 1];
 
-        // Skip rows where last cell isn't a number (info/title rows)
+        if (!styleCode || !size) continue;
+
         let qty = 1;
-        try {
-          const parsed = parseInt(parseFloat(qtyRaw).toString(), 10);
-          if (!isNaN(parsed) && parsed > 0) qty = parsed;
-          else continue;
-        } catch {
+        const parsed = parseInt(qtyRaw);
+        if (!isNaN(parsed) && parsed > 0) {
+          qty = parsed;
+        } else {
           continue;
         }
 
-        if (!styleCode) continue;
-
-        // Full SKU = style code + "-" + size (e.g. "HS005-GREEN-XXL")
         const fullSku = `${styleCode}-${size}`;
 
-        const existing = orders.find((o) => o.Portal_SKU === fullSku);
-        if (existing) {
-          existing.Qty += qty;
-        } else {
-          orders.push({ Portal_SKU: fullSku, Qty: qty });
-        }
+        // ✅ FAST aggregation using Map
+        ordersMap.set(fullSku, (ordersMap.get(fullSku) || 0) + qty);
       }
     }
+
+    // Convert to array
+    const orders = Array.from(ordersMap.entries()).map(
+      ([Portal_SKU, Qty]) => ({
+        Portal_SKU,
+        Qty,
+      })
+    );
 
     return NextResponse.json({ orders });
   } catch (error) {
     console.error("PDF error:", error);
-    return NextResponse.json({ error: "Failed to parse PDF" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to parse PDF" },
+      { status: 500 }
+    );
   }
 }
