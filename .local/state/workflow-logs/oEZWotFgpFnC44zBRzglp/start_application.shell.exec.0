@@ -1,0 +1,51 @@
+
+> my-project@0.1.0 dev
+> next dev -p 5000
+
+[1G[0K[1m[38;2;173;127;168m▲ Next.js 16.2.0[39m[22m (Turbopack)
+- Local:         http://localhost:5000
+- Network:       http://172.31.75.66:5000
+[32m[1m✓[22m[39m Ready in 337ms
+[35m[1mAttention[22m[39m: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+[36mhttps://nextjs.org/telemetry[39m
+
+[33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+ GET / [32m200[39m in 2.9s[2m (next.js: 2.4s, proxy.ts: 105ms, application-code: 397ms)[22m
+ GET / [32m200[39m in 102ms[2m (next.js: 5ms, proxy.ts: 8ms, application-code: 88ms)[22m
+ GET / [32m200[39m in 100ms[2m (next.js: 4ms, proxy.ts: 6ms, application-code: 90ms)[22m
+ GET /auth/login [32m200[39m in 746ms[2m (next.js: 616ms, proxy.ts: 6ms, application-code: 124ms)[22m
+[33m[1m⚠[22m[39m Blocked cross-origin request to Next.js dev resource /_next/webpack-hmr from "f4073cb6-70dd-42b3-a86c-854477d86220-00-lm7tj57amqbm.kirk.repl.co".
+Cross-origin access to Next.js dev resources is blocked by default for safety.
+
+To allow this host in development, add it to "allowedDevOrigins" in next.config.js and restart the dev server:
+
+// next.config.js
+module.exports = {
+  allowedDevOrigins: ['f4073cb6-70dd-42b3-a86c-854477d86220-00-lm7tj57amqbm.kirk.repl.co'],
+}
+
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+ GET /auth/login? [32m200[39m in 53ms[2m (next.js: 4ms, proxy.ts: 6ms, application-code: 43ms)[22m
+ GET / [32m200[39m in 85ms[2m (next.js: 4ms, proxy.ts: 5ms, application-code: 77ms)[22m
+ GET /dashbord [33m404[39m in 317ms[2m (next.js: 277ms, proxy.ts: 5ms, application-code: 35ms)[22m
+ GET /auth/login [32m200[39m in 39ms[2m (next.js: 4ms, proxy.ts: 4ms, application-code: 31ms)[22m
+ GET /auth/login? [32m200[39m in 45ms[2m (next.js: 2ms, proxy.ts: 4ms, application-code: 38ms)[22m
+ GET /auth/sign-up [32m200[39m in 646ms[2m (next.js: 526ms, proxy.ts: 6ms, application-code: 115ms)[22m
+ GET /auth/sign-up? [32m200[39m in 52ms[2m (next.js: 5ms, proxy.ts: 6ms, application-code: 41ms)[22m
+ GET /auth/login [32m200[39m in 58ms[2m (next.js: 4ms, proxy.ts: 6ms, application-code: 48ms)[22m
+ GET /auth/login? [32m200[39m in 44ms[2m (next.js: 2ms, proxy.ts: 5ms, application-code: 37ms)[22m
+ GET / [32m200[39m in 90ms[2m (next.js: 4ms, proxy.ts: 5ms, application-code: 81ms)[22m
+ GET /auth/login? [32m200[39m in 45ms[2m (next.js: 3ms, proxy.ts: 5ms, application-code: 37ms)[22m
+ GET /auth/login [32m200[39m in 57ms[2m (next.js: 2ms, proxy.ts: 4ms, application-code: 51ms)[22m
+[33m[1m⚠[22m[39m Found a change in next.config.mjs. Restarting the server to apply the changes...
+[1m[38;2;173;127;168m▲ Next.js 16.2.0[39m[22m (Turbopack)
+- Local:         http://localhost:5000
+- Network:       http://172.31.75.66:5000
+[32m[1m✓[22m[39m Ready in 278ms
+[33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+[?25h
+[1G[0K⠙[1G[0K

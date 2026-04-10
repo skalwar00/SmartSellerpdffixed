@@ -1,0 +1,260 @@
+
+> my-project@0.1.0 dev
+> next dev -p 5000
+
+[1G[0K[1m[38;2;173;127;168m▲ Next.js 16.2.0[39m[22m (Turbopack)
+- Local:         http://localhost:5000
+- Network:       http://172.31.75.66:5000
+[32m[1m✓[22m[39m Ready in 348ms
+[33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+ GET / [32m200[39m in 2.7s[2m (next.js: 2.2s, proxy.ts: 216ms, application-code: 340ms)[22m
+ GET /dashboard [32m200[39m in 905ms[2m (next.js: 70ms, proxy.ts: 19ms, application-code: 817ms)[22m
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+ POST /api/parse-pdf [32m200[39m in 1050ms[2m (next.js: 115ms, proxy.ts: 413ms, application-code: 522ms)[22m
+ POST /api/generate-picklist [32m200[39m in 1359ms[2m (next.js: 1269ms, proxy.ts: 10ms, application-code: 80ms)[22m
+[32m[1m✓[22m[39m Compiled in 73ms
+[32m[1m✓[22m[39m Compiled in 948ms
+ GET / [32m200[39m in 818ms[2m (next.js: 382ms, proxy.ts: 277ms, application-code: 159ms)[22m
+ GET / [32m200[39m in 115ms[2m (next.js: 35ms, proxy.ts: 15ms, application-code: 65ms)[22m
+ GET /dashboard [32m200[39m in 272ms[2m (next.js: 145ms, proxy.ts: 13ms, application-code: 114ms)[22m
+ GET /dashboard [32m200[39m in 69ms[2m (next.js: 5ms, proxy.ts: 8ms, application-code: 56ms)[22m
+ GET /auth/login [32m200[39m in 200ms[2m (next.js: 16ms, proxy.ts: 5ms, application-code: 179ms)[22m
+ GET /dashboard/costing [32m200[39m in 47ms[2m (next.js: 19ms, proxy.ts: 7ms, application-code: 21ms)[22m
+ GET /dashboard/flipkart [32m200[39m in 897ms[2m (next.js: 869ms, proxy.ts: 6ms, application-code: 22ms)[22m
+ GET /dashboard/myntra [32m200[39m in 47ms[2m (next.js: 16ms, proxy.ts: 7ms, application-code: 24ms)[22m
+ GET /dashboard/subscription [32m200[39m in 744ms[2m (next.js: 706ms, proxy.ts: 8ms, application-code: 30ms)[22m
+ GET /dashboard [32m200[39m in 24ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 15ms)[22m
+ GET /dashboard [32m200[39m in 297ms[2m (next.js: 92ms, proxy.ts: 32ms, application-code: 173ms)[22m
+ GET / [32m200[39m in 265ms[2m (next.js: 18ms, proxy.ts: 191ms, application-code: 56ms)[22m
+ GET /dashboard [32m200[39m in 296ms[2m (next.js: 89ms, proxy.ts: 42ms, application-code: 165ms)[22m
+ GET / [32m200[39m in 93ms[2m (next.js: 17ms, proxy.ts: 6ms, application-code: 69ms)[22m
+ GET /dashboard [32m200[39m in 77ms[2m (next.js: 27ms, proxy.ts: 8ms, application-code: 41ms)[22m
+ GET / [32m200[39m in 65ms[2m (next.js: 23ms, proxy.ts: 4ms, application-code: 39ms)[22m
+ GET /dashboard [32m200[39m in 59ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 48ms)[22m
+ GET / [32m200[39m in 47ms[2m (next.js: 3ms, proxy.ts: 5ms, application-code: 39ms)[22m
+ GET /dashboard [32m200[39m in 82ms[2m (next.js: 26ms, proxy.ts: 6ms, application-code: 49ms)[22m
+ GET / [32m200[39m in 44ms[2m (next.js: 2ms, proxy.ts: 4ms, application-code: 38ms)[22m
+ GET /dashboard [32m200[39m in 70ms[2m (next.js: 33ms, proxy.ts: 7ms, application-code: 30ms)[22m
+ GET / [32m200[39m in 54ms[2m (next.js: 5ms, proxy.ts: 4ms, application-code: 45ms)[22m
+ GET /dashboard [32m200[39m in 73ms[2m (next.js: 34ms, proxy.ts: 7ms, application-code: 32ms)[22m
+ GET / [32m200[39m in 64ms[2m (next.js: 22ms, proxy.ts: 5ms, application-code: 37ms)[22m
+ GET /dashboard [32m200[39m in 41ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 32ms)[22m
+ GET / [32m200[39m in 37ms[2m (next.js: 3ms, proxy.ts: 3ms, application-code: 31ms)[22m
+ GET /dashboard [32m200[39m in 39ms[2m (next.js: 5ms, proxy.ts: 6ms, application-code: 28ms)[22m
+ GET / [32m200[39m in 40ms[2m (next.js: 2ms, proxy.ts: 4ms, application-code: 34ms)[22m
+ GET /dashboard [32m200[39m in 39ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 31ms)[22m
+ GET / [32m200[39m in 41ms[2m (next.js: 3ms, proxy.ts: 3ms, application-code: 35ms)[22m
+ GET /dashboard [32m200[39m in 38ms[2m (next.js: 2ms, proxy.ts: 5ms, application-code: 30ms)[22m
+ GET / [32m200[39m in 55ms[2m (next.js: 3ms, proxy.ts: 5ms, application-code: 47ms)[22m
+ GET /dashboard [32m200[39m in 40ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 32ms)[22m
+ GET / [32m200[39m in 43ms[2m (next.js: 3ms, proxy.ts: 3ms, application-code: 37ms)[22m
+ GET /dashboard [32m200[39m in 38ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 29ms)[22m
+ GET / [32m200[39m in 48ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 42ms)[22m
+ GET /dashboard [32m200[39m in 46ms[2m (next.js: 4ms, proxy.ts: 6ms, application-code: 36ms)[22m
+ GET / [32m200[39m in 44ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 37ms)[22m
+ GET /dashboard [32m200[39m in 37ms[2m (next.js: 2ms, proxy.ts: 5ms, application-code: 29ms)[22m
+ GET / [32m200[39m in 42ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 35ms)[22m
+ GET /dashboard [32m200[39m in 45ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 35ms)[22m
+ GET / [32m200[39m in 42ms[2m (next.js: 3ms, proxy.ts: 3ms, application-code: 36ms)[22m
+ GET /dashboard [32m200[39m in 37ms[2m (next.js: 3ms, proxy.ts: 5ms, application-code: 29ms)[22m
+ GET / [32m200[39m in 43ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 36ms)[22m
+ GET /dashboard [32m200[39m in 42ms[2m (next.js: 2ms, proxy.ts: 5ms, application-code: 34ms)[22m
+ GET / [32m200[39m in 41ms[2m (next.js: 2ms, proxy.ts: 3ms, application-code: 36ms)[22m
+ GET /dashboard [32m200[39m in 42ms[2m (next.js: 6ms, proxy.ts: 6ms, application-code: 30ms)[22m
+ GET / [32m200[39m in 108ms[2m (next.js: 66ms, proxy.ts: 4ms, application-code: 38ms)[22m
+ GET /dashboard [32m200[39m in 97ms[2m (next.js: 47ms, proxy.ts: 7ms, application-code: 43ms)[22m
+ GET / [32m200[39m in 49ms[2m (next.js: 8ms, proxy.ts: 4ms, application-code: 37ms)[22m
+ GET /dashboard [32m200[39m in 61ms[2m (next.js: 15ms, proxy.ts: 8ms, application-code: 38ms)[22m
+ GET / [32m200[39m in 73ms[2m (next.js: 14ms, proxy.ts: 8ms, application-code: 52ms)[22m
+ GET /dashboard [32m200[39m in 110ms[2m (next.js: 5ms, proxy.ts: 11ms, application-code: 93ms)[22m
+ GET / [32m200[39m in 57ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 51ms)[22m
+ GET /dashboard [32m200[39m in 48ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 39ms)[22m
+ GET / [32m200[39m in 54ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 47ms)[22m
+ GET /dashboard [32m200[39m in 44ms[2m (next.js: 3ms, proxy.ts: 10ms, application-code: 32ms)[22m
+ GET / [32m200[39m in 72ms[2m (next.js: 22ms, proxy.ts: 4ms, application-code: 46ms)[22m
+ GET /dashboard [32m200[39m in 47ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 36ms)[22m
+ GET / [32m200[39m in 85ms[2m (next.js: 40ms, proxy.ts: 4ms, application-code: 40ms)[22m
+ GET /dashboard [32m200[39m in 49ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 40ms)[22m
+ GET / [32m200[39m in 87ms[2m (next.js: 29ms, proxy.ts: 4ms, application-code: 54ms)[22m
+ GET /dashboard [32m200[39m in 46ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 36ms)[22m
+ GET / [32m200[39m in 37ms[2m (next.js: 2ms, proxy.ts: 3ms, application-code: 31ms)[22m
+ GET /dashboard [32m200[39m in 36ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 28ms)[22m
+ GET / [32m200[39m in 52ms[2m (next.js: 2ms, proxy.ts: 3ms, application-code: 46ms)[22m
+ GET /dashboard [32m200[39m in 62ms[2m (next.js: 5ms, proxy.ts: 7ms, application-code: 50ms)[22m
+ GET / [32m200[39m in 47ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 38ms)[22m
+ GET /dashboard [32m200[39m in 46ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 37ms)[22m
+ GET / [32m200[39m in 46ms[2m (next.js: 2ms, proxy.ts: 4ms, application-code: 40ms)[22m
+ GET /dashboard [32m200[39m in 48ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 39ms)[22m
+ GET / [32m200[39m in 45ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 39ms)[22m
+ GET /dashboard [32m200[39m in 39ms[2m (next.js: 3ms, proxy.ts: 8ms, application-code: 29ms)[22m
+ GET / [32m200[39m in 43ms[2m (next.js: 2ms, proxy.ts: 3ms, application-code: 38ms)[22m
+ GET /dashboard [32m200[39m in 49ms[2m (next.js: 3ms, proxy.ts: 5ms, application-code: 40ms)[22m
+ GET / [32m200[39m in 46ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 38ms)[22m
+ GET /dashboard [32m200[39m in 42ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 33ms)[22m
+ GET / [32m200[39m in 44ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 38ms)[22m
+ GET /dashboard [32m200[39m in 41ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 33ms)[22m
+ GET / [32m200[39m in 41ms[2m (next.js: 2ms, proxy.ts: 3ms, application-code: 36ms)[22m
+ GET /dashboard [32m200[39m in 39ms[2m (next.js: 3ms, proxy.ts: 5ms, application-code: 31ms)[22m
+ GET / [32m200[39m in 43ms[2m (next.js: 2ms, proxy.ts: 4ms, application-code: 37ms)[22m
+ GET /dashboard [32m200[39m in 46ms[2m (next.js: 2ms, proxy.ts: 6ms, application-code: 37ms)[22m
+ GET / [32m200[39m in 44ms[2m (next.js: 2ms, proxy.ts: 4ms, application-code: 38ms)[22m
+ GET /dashboard [32m200[39m in 35ms[2m (next.js: 2ms, proxy.ts: 6ms, application-code: 27ms)[22m
+ GET / [32m200[39m in 45ms[2m (next.js: 2ms, proxy.ts: 3ms, application-code: 39ms)[22m
+ GET /dashboard [32m200[39m in 43ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 34ms)[22m
+ GET / [32m200[39m in 42ms[2m (next.js: 2ms, proxy.ts: 3ms, application-code: 36ms)[22m
+ GET /dashboard [32m200[39m in 42ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 34ms)[22m
+ GET / [32m200[39m in 106ms[2m (next.js: 36ms, proxy.ts: 4ms, application-code: 66ms)[22m
+ GET /dashboard [32m200[39m in 49ms[2m (next.js: 8ms, proxy.ts: 7ms, application-code: 34ms)[22m
+ GET / [32m200[39m in 62ms[2m (next.js: 4ms, proxy.ts: 5ms, application-code: 54ms)[22m
+ GET /dashboard [32m200[39m in 86ms[2m (next.js: 6ms, proxy.ts: 8ms, application-code: 72ms)[22m
+ GET / [32m200[39m in 53ms[2m (next.js: 3ms, proxy.ts: 5ms, application-code: 45ms)[22m
+ GET /dashboard [32m200[39m in 74ms[2m (next.js: 28ms, proxy.ts: 8ms, application-code: 39ms)[22m
+ GET /dashboard [32m200[39m in 64ms[2m (next.js: 6ms, proxy.ts: 7ms, application-code: 52ms)[22m
+ GET / [32m200[39m in 203ms[2m (next.js: 84ms, proxy.ts: 6ms, application-code: 113ms)[22m
+ GET / [32m200[39m in 89ms[2m (next.js: 29ms, proxy.ts: 5ms, application-code: 55ms)[22m
+ GET /dashboard [32m200[39m in 164ms[2m (next.js: 40ms, proxy.ts: 82ms, application-code: 42ms)[22m
+ GET / [32m200[39m in 49ms[2m (next.js: 3ms, proxy.ts: 5ms, application-code: 42ms)[22m
+ GET /dashboard [32m200[39m in 45ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 36ms)[22m
+ GET / [32m200[39m in 50ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 43ms)[22m
+ GET /dashboard [32m200[39m in 40ms[2m (next.js: 3ms, proxy.ts: 5ms, application-code: 32ms)[22m
+ GET / [32m200[39m in 47ms[2m (next.js: 2ms, proxy.ts: 5ms, application-code: 40ms)[22m
+ GET /dashboard [32m200[39m in 41ms[2m (next.js: 2ms, proxy.ts: 5ms, application-code: 34ms)[22m
+ GET / [32m200[39m in 41ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 35ms)[22m
+ GET /dashboard [32m200[39m in 43ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 34ms)[22m
+ GET / [32m200[39m in 46ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 39ms)[22m
+ GET /dashboard [32m200[39m in 85ms[2m (next.js: 44ms, proxy.ts: 8ms, application-code: 33ms)[22m
+ GET / [32m200[39m in 39ms[2m (next.js: 3ms, proxy.ts: 3ms, application-code: 33ms)[22m
+ GET /dashboard [32m200[39m in 54ms[2m (next.js: 12ms, proxy.ts: 12ms, application-code: 30ms)[22m
+ GET / [32m200[39m in 56ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 49ms)[22m
+ GET /dashboard [32m200[39m in 72ms[2m (next.js: 32ms, proxy.ts: 6ms, application-code: 34ms)[22m
+ GET / [32m200[39m in 67ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 60ms)[22m
+ GET /dashboard [32m200[39m in 87ms[2m (next.js: 43ms, proxy.ts: 9ms, application-code: 35ms)[22m
+ GET / [32m200[39m in 97ms[2m (next.js: 52ms, proxy.ts: 4ms, application-code: 41ms)[22m
+ GET /dashboard [32m200[39m in 204ms[2m (next.js: 31ms, proxy.ts: 6ms, application-code: 167ms)[22m
+ GET / [32m200[39m in 130ms[2m (next.js: 49ms, proxy.ts: 4ms, application-code: 77ms)[22m
+ GET / [32m200[39m in 138ms[2m (next.js: 13ms, proxy.ts: 6ms, application-code: 119ms)[22m
+ GET / [32m200[39m in 127ms[2m (next.js: 77ms, proxy.ts: 5ms, application-code: 46ms)[22m
+ GET /dashboard [32m200[39m in 76ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 67ms)[22m
+ GET /dashboard [32m200[39m in 122ms[2m (next.js: 67ms, proxy.ts: 9ms, application-code: 46ms)[22m
+ GET /dashboard [32m200[39m in 114ms[2m (next.js: 41ms, proxy.ts: 7ms, application-code: 65ms)[22m
+ GET / [32m200[39m in 91ms[2m (next.js: 42ms, proxy.ts: 10ms, application-code: 39ms)[22m
+ GET /dashboard [32m200[39m in 91ms[2m (next.js: 36ms, proxy.ts: 20ms, application-code: 36ms)[22m
+ GET /dashboard [32m200[39m in 168ms[2m (next.js: 51ms, proxy.ts: 7ms, application-code: 110ms)[22m
+ GET / [32m200[39m in 119ms[2m (next.js: 36ms, proxy.ts: 4ms, application-code: 79ms)[22m
+ GET / [32m200[39m in 85ms[2m (next.js: 40ms, proxy.ts: 3ms, application-code: 42ms)[22m
+ GET /dashboard [32m200[39m in 78ms[2m (next.js: 42ms, proxy.ts: 7ms, application-code: 29ms)[22m
+ GET /dashboard [32m200[39m in 79ms[2m (next.js: 7ms, proxy.ts: 5ms, application-code: 67ms)[22m
+ GET /dashboard [32m200[39m in 162ms[2m (next.js: 76ms, proxy.ts: 8ms, application-code: 78ms)[22m
+ GET / [32m200[39m in 173ms[2m (next.js: 102ms, proxy.ts: 7ms, application-code: 64ms)[22m
+ GET / [32m200[39m in 157ms[2m (next.js: 29ms, proxy.ts: 5ms, application-code: 123ms)[22m
+ GET /dashboard [32m200[39m in 49ms[2m (next.js: 3ms, proxy.ts: 5ms, application-code: 41ms)[22m
+ GET / [32m200[39m in 48ms[2m (next.js: 10ms, proxy.ts: 4ms, application-code: 35ms)[22m
+ GET /dashboard [32m200[39m in 193ms[2m (next.js: 2ms, proxy.ts: 5ms, application-code: 185ms)[22m
+ GET /dashboard [32m200[39m in 86ms[2m (next.js: 14ms, proxy.ts: 7ms, application-code: 65ms)[22m
+ GET / [32m200[39m in 173ms[2m (next.js: 6ms, proxy.ts: 5ms, application-code: 163ms)[22m
+ GET / [32m200[39m in 169ms[2m (next.js: 42ms, proxy.ts: 3ms, application-code: 124ms)[22m
+ GET /dashboard [32m200[39m in 274ms[2m (next.js: 87ms, proxy.ts: 9ms, application-code: 179ms)[22m
+ GET /dashboard [32m200[39m in 265ms[2m (next.js: 62ms, proxy.ts: 7ms, application-code: 197ms)[22m
+ GET / [32m200[39m in 322ms[2m (next.js: 52ms, proxy.ts: 39ms, application-code: 232ms)[22m
+ GET /dashboard [32m200[39m in 50ms[2m (next.js: 4ms, proxy.ts: 6ms, application-code: 41ms)[22m
+ GET / [32m200[39m in 159ms[2m (next.js: 43ms, proxy.ts: 28ms, application-code: 88ms)[22m
+ GET / [32m200[39m in 161ms[2m (next.js: 14ms, proxy.ts: 27ms, application-code: 121ms)[22m
+ GET /dashboard [32m200[39m in 264ms[2m (next.js: 85ms, proxy.ts: 6ms, application-code: 173ms)[22m
+ GET /dashboard [32m200[39m in 136ms[2m (next.js: 10ms, proxy.ts: 9ms, application-code: 117ms)[22m
+ GET / [32m200[39m in 286ms[2m (next.js: 50ms, proxy.ts: 5ms, application-code: 231ms)[22m
+ GET / [32m200[39m in 133ms[2m (next.js: 52ms, proxy.ts: 5ms, application-code: 76ms)[22m
+ GET /dashboard [32m200[39m in 569ms[2m (next.js: 142ms, proxy.ts: 10ms, application-code: 417ms)[22m
+ GET /dashboard [32m200[39m in 560ms[2m (next.js: 109ms, proxy.ts: 7ms, application-code: 444ms)[22m
+ GET /dashboard [32m200[39m in 396ms[2m (next.js: 63ms, proxy.ts: 32ms, application-code: 300ms)[22m
+ GET / [32m200[39m in 660ms[2m (next.js: 115ms, proxy.ts: 6ms, application-code: 539ms)[22m
+ GET / [32m200[39m in 625ms[2m (next.js: 26ms, proxy.ts: 6ms, application-code: 592ms)[22m
+ GET /dashboard [32m200[39m in 219ms[2m (next.js: 76ms, proxy.ts: 11ms, application-code: 132ms)[22m
+ GET /dashboard [32m200[39m in 208ms[2m (next.js: 101ms, proxy.ts: 8ms, application-code: 99ms)[22m
+ GET / [32m200[39m in 414ms[2m (next.js: 52ms, proxy.ts: 9ms, application-code: 353ms)[22m
+ GET / [32m200[39m in 364ms[2m (next.js: 154ms, proxy.ts: 6ms, application-code: 204ms)[22m
+ GET / [32m200[39m in 122ms[2m (next.js: 49ms, proxy.ts: 14ms, application-code: 58ms)[22m
+ GET / [32m200[39m in 51ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 45ms)[22m
+ GET /dashboard [32m200[39m in 341ms[2m (next.js: 34ms, proxy.ts: 8ms, application-code: 299ms)[22m
+ GET /dashboard [32m200[39m in 333ms[2m (next.js: 6ms, proxy.ts: 6ms, application-code: 320ms)[22m
+ GET /dashboard [32m200[39m in 387ms[2m (next.js: 19ms, proxy.ts: 17ms, application-code: 352ms)[22m
+ GET /dashboard [32m200[39m in 400ms[2m (next.js: 96ms, proxy.ts: 7ms, application-code: 296ms)[22m
+ GET /dashboard [32m200[39m in 370ms[2m (next.js: 150ms, proxy.ts: 8ms, application-code: 212ms)[22m
+ GET /dashboard [32m200[39m in 362ms[2m (next.js: 95ms, proxy.ts: 145ms, application-code: 121ms)[22m
+ GET / [32m200[39m in 399ms[2m (next.js: 50ms, proxy.ts: 7ms, application-code: 341ms)[22m
+ GET / [32m200[39m in 414ms[2m (next.js: 124ms, proxy.ts: 5ms, application-code: 285ms)[22m
+ GET / [32m200[39m in 369ms[2m (next.js: 189ms, proxy.ts: 5ms, application-code: 175ms)[22m
+ GET / [32m200[39m in 185ms[2m (next.js: 94ms, proxy.ts: 7ms, application-code: 83ms)[22m
+ GET / [32m200[39m in 136ms[2m (next.js: 83ms, proxy.ts: 5ms, application-code: 48ms)[22m
+ GET / [32m200[39m in 40ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 33ms)[22m
+ GET /dashboard [32m200[39m in 96ms[2m (next.js: 20ms, proxy.ts: 10ms, application-code: 67ms)[22m
+ GET /dashboard [32m200[39m in 100ms[2m (next.js: 51ms, proxy.ts: 7ms, application-code: 43ms)[22m
+ GET /dashboard [32m200[39m in 272ms[2m (next.js: 24ms, proxy.ts: 6ms, application-code: 242ms)[22m
+ GET /dashboard [32m200[39m in 301ms[2m (next.js: 46ms, proxy.ts: 21ms, application-code: 235ms)[22m
+ GET / [32m200[39m in 250ms[2m (next.js: 52ms, proxy.ts: 6ms, application-code: 193ms)[22m
+ GET / [32m200[39m in 227ms[2m (next.js: 56ms, proxy.ts: 15ms, application-code: 156ms)[22m
+ GET / [32m200[39m in 207ms[2m (next.js: 75ms, proxy.ts: 6ms, application-code: 126ms)[22m
+ GET / [32m200[39m in 201ms[2m (next.js: 110ms, proxy.ts: 3ms, application-code: 88ms)[22m
+ GET / [32m200[39m in 74ms[2m (next.js: 4ms, proxy.ts: 7ms, application-code: 63ms)[22m
+ GET /dashboard [32m200[39m in 70ms[2m (next.js: 33ms, proxy.ts: 6ms, application-code: 31ms)[22m
+[?25h
+[1G[0K⠙[1G[0K

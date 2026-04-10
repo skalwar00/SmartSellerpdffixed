@@ -1,0 +1,76 @@
+
+> my-project@0.1.0 dev
+> next dev -p 5000
+
+[1G[0K[1m[38;2;173;127;168m▲ Next.js 16.2.0[39m[22m (Turbopack)
+- Local:         http://localhost:5000
+- Network:       http://172.31.75.66:5000
+[32m[1m✓[22m[39m Ready in 348ms
+[33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+ GET / [32m200[39m in 727ms[2m (next.js: 326ms, proxy.ts: 114ms, application-code: 287ms)[22m
+ GET /dashboard [32m200[39m in 964ms[2m (next.js: 45ms, proxy.ts: 13ms, application-code: 906ms)[22m
+ GET /dashboard [32m200[39m in 335ms[2m (next.js: 5ms, proxy.ts: 9ms, application-code: 320ms)[22m
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Bold.ttf
+Warning: UnknownErrorException: Unable to load font data at: file:///home/runner/workspace/node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf
+ POST /api/parse-pdf [32m200[39m in 682ms[2m (next.js: 72ms, proxy.ts: 313ms, application-code: 297ms)[22m
+[?25h
+[1G[0K⠙[1G[0K

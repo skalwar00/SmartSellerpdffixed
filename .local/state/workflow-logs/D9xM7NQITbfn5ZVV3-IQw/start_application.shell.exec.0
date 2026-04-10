@@ -1,0 +1,198 @@
+
+> my-project@0.1.0 dev
+> next dev -p 5000
+
+[1G[0K[1m[38;2;173;127;168m▲ Next.js 16.2.0[39m[22m (Turbopack)
+- Local:         http://localhost:5000
+- Network:       http://172.31.75.66:5000
+[32m[1m✓[22m[39m Ready in 325ms
+[33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+ GET / [32m200[39m in 1453ms[2m (next.js: 967ms, proxy.ts: 216ms, application-code: 269ms)[22m
+ GET /auth/login [32m200[39m in 131ms[2m (next.js: 17ms, proxy.ts: 7ms, application-code: 107ms)[22m
+ GET /auth/login [32m200[39m in 47ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 40ms)[22m
+ GET /dashboard [32m200[39m in 2.6s[2m (next.js: 1346ms, proxy.ts: 16ms, application-code: 1199ms)[22m
+ GET /dashboard/costing [32m200[39m in 559ms[2m (next.js: 527ms, proxy.ts: 8ms, application-code: 24ms)[22m
+ GET /dashboard/myntra [32m200[39m in 617ms[2m (next.js: 573ms, proxy.ts: 7ms, application-code: 37ms)[22m
+ GET /dashboard [32m200[39m in 27ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 17ms)[22m
+ GET /dashboard/costing [32m200[39m in 33ms[2m (next.js: 4ms, proxy.ts: 9ms, application-code: 21ms)[22m
+ GET /dashboard [32m200[39m in 35ms[2m (next.js: 5ms, proxy.ts: 10ms, application-code: 20ms)[22m
+[32m[1m✓[22m[39m Compiled in 114ms
+[33m[1m⚠[22m[39m ./app/api/parse-pdf/route.ts:19:28
+[1m[31mModule not found[39m[22m: Can't resolve [32m'pdfjs-dist/legacy/build/pdf.js'[39m
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                            [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+PDF error: Error: Cannot find module 'pdfjs-dist/legacy/build/pdf.js'
+    at <unknown> (.next/dev/server/chunks/[root-of-the-server]__125voek._.js:74:23)
+    at async POST (app/api/parse-pdf/route.ts:19:22)
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                      [31m[1m^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m {
+  code: [32m'MODULE_NOT_FOUND'[39m
+}
+ POST /api/parse-pdf [31m500[39m in 527ms[2m (next.js: 325ms, proxy.ts: 26ms, application-code: 176ms)[22m
+[33m[1m⚠[22m[39m ./app/api/parse-pdf/route.ts:19:28
+[1m[31mModule not found[39m[22m: Can't resolve [32m'pdfjs-dist/legacy/build/pdf.js'[39m
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                            [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+PDF error: Error: Cannot find module 'pdfjs-dist/legacy/build/pdf.js'
+    at <unknown> (.next/dev/server/chunks/[root-of-the-server]__125voek._.js:74:23)
+    at async POST (app/api/parse-pdf/route.ts:19:22)
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                      [31m[1m^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m {
+  code: [32m'MODULE_NOT_FOUND'[39m
+}
+ POST /api/parse-pdf [31m500[39m in 553ms[2m (next.js: 6ms, proxy.ts: 433ms, application-code: 114ms)[22m
+[33m[1m⚠[22m[39m ./app/api/parse-pdf/route.ts:19:28
+[1m[31mModule not found[39m[22m: Can't resolve [32m'pdfjs-dist/legacy/build/pdf.js'[39m
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                            [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+PDF error: Error: Cannot find module 'pdfjs-dist/legacy/build/pdf.js'
+    at <unknown> (.next/dev/server/chunks/[root-of-the-server]__125voek._.js:74:23)
+    at async POST (app/api/parse-pdf/route.ts:19:22)
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                      [31m[1m^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m {
+  code: [32m'MODULE_NOT_FOUND'[39m
+}
+ POST /api/parse-pdf [31m500[39m in 488ms[2m (next.js: 5ms, proxy.ts: 384ms, application-code: 99ms)[22m
+[33m[1m⚠[22m[39m ./app/api/parse-pdf/route.ts:19:28
+[1m[31mModule not found[39m[22m: Can't resolve [32m'pdfjs-dist/legacy/build/pdf.js'[39m
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                            [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+PDF error: Error: Cannot find module 'pdfjs-dist/legacy/build/pdf.js'
+    at <unknown> (.next/dev/server/chunks/[root-of-the-server]__125voek._.js:74:23)
+    at async POST (app/api/parse-pdf/route.ts:19:22)
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                      [31m[1m^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m {
+  code: [32m'MODULE_NOT_FOUND'[39m
+}
+ POST /api/parse-pdf [31m500[39m in 421ms[2m (next.js: 4ms, proxy.ts: 319ms, application-code: 98ms)[22m
+[33m[1m⚠[22m[39m ./app/api/parse-pdf/route.ts:19:28
+[1m[31mModule not found[39m[22m: Can't resolve [32m'pdfjs-dist/legacy/build/pdf.js'[39m
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                            [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+ GET /dashboard [32m200[39m in 416ms[2m (next.js: 206ms, proxy.ts: 133ms, application-code: 77ms)[22m
+[33m[1m⚠[22m[39m ./app/api/parse-pdf/route.ts:19:28
+[1m[31mModule not found[39m[22m: Can't resolve [32m'pdfjs-dist/legacy/build/pdf.js'[39m
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                            [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+ GET /dashboard [32m200[39m in 79ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 69ms)[22m
+[33m[1m⚠[22m[39m ./app/api/parse-pdf/route.ts:19:28
+[1m[31mModule not found[39m[22m: Can't resolve [32m'pdfjs-dist/legacy/build/pdf.js'[39m
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                            [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+ GET / [32m200[39m in 102ms[2m (next.js: 17ms, proxy.ts: 5ms, application-code: 81ms)[22m
+[33m[1m⚠[22m[39m ./app/api/parse-pdf/route.ts:19:28
+[1m[31mModule not found[39m[22m: Can't resolve [32m'pdfjs-dist/legacy/build/pdf.js'[39m
+  [90m17 |[0m
+  [90m18 |[0m     [90m// ✅ Dynamic import (VERY IMPORTANT for Vercel)[0m
+[31m[1m>[0m [90m19 |[0m     [36mconst[0m pdfjsLib = [36mawait[0m [36mimport[0m([32m"pdfjs-dist/legacy/build/pdf.js"[0m);
+  [90m   |[0m                            [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m20 |[0m
+  [90m21 |[0m     [36mconst[0m pdf = [36mawait[0m pdfjsLib.getDocument({ data: buffer }).promise;
+  [90m22 |[0m
+
+
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+ GET / [32m200[39m in 61ms[2m (next.js: 5ms, proxy.ts: 7ms, application-code: 50ms)[22m
+[?25h
+[1G[0K⠙[1G[0K

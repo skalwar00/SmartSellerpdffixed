@@ -1,0 +1,101 @@
+
+> my-project@0.1.0 dev
+> next dev -p 5000
+
+[1G[0K[1m[38;2;173;127;168m▲ Next.js 16.2.0[39m[22m (Turbopack)
+- Local:         http://localhost:5000
+- Network:       http://172.31.75.66:5000
+[32m[1m✓[22m[39m Ready in 361ms
+[33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+ GET / [32m200[39m in 3.4s[2m (next.js: 2.7s, proxy.ts: 170ms, application-code: 566ms)[22m
+ GET /dashboard [32m200[39m in 3.1s[2m (next.js: 1957ms, proxy.ts: 16ms, application-code: 1084ms)[22m
+ GET /admin [32m200[39m in 3.0s[2m (next.js: 2.5s, proxy.ts: 11ms, application-code: 498ms)[22m
+ GET /admin/payments [32m200[39m in 1374ms[2m (next.js: 1342ms, proxy.ts: 8ms, application-code: 24ms)[22m
+ GET /api/admin/payments [32m200[39m in 1244ms[2m (next.js: 612ms, proxy.ts: 8ms, application-code: 624ms)[22m
+ GET /api/admin/payments [32m200[39m in 274ms[2m (next.js: 3ms, proxy.ts: 8ms, application-code: 262ms)[22m
+ POST /admin/payments [32m200[39m in 344ms[2m (next.js: 10ms, proxy.ts: 9ms, application-code: 325ms)[22m
+  └─ ƒ approvePayment("e53a89e8-7992-41d7-a928-7459aa77eb6b", "10f85090-e318-4a89-a445-0472eea5d42c") in 147ms [2mapp/admin/actions.ts[22m
+ GET /api/admin/payments [32m200[39m in 269ms[2m (next.js: 4ms, proxy.ts: 8ms, application-code: 257ms)[22m
+ POST /admin/payments [32m200[39m in 404ms[2m (next.js: 5ms, proxy.ts: 12ms, application-code: 388ms)[22m
+  └─ ƒ approvePayment("32e516c0-299b-4859-9c5f-37746a0c6c21", "10f85090-e318-4a89-a445-0472eea5d42c") in 199ms [2mapp/admin/actions.ts[22m
+ GET /api/admin/payments [32m200[39m in 279ms[2m (next.js: 2ms, proxy.ts: 6ms, application-code: 271ms)[22m
+ GET /admin/users [32m200[39m in 633ms[2m (next.js: 606ms, proxy.ts: 6ms, application-code: 21ms)[22m
+ GET /api/admin/users [32m200[39m in 660ms[2m (next.js: 217ms, proxy.ts: 8ms, application-code: 435ms)[22m
+ GET /api/admin/users [32m200[39m in 246ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 236ms)[22m
+ GET /admin/payments [32m200[39m in 34ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 23ms)[22m
+ GET /api/admin/payments [32m200[39m in 237ms[2m (next.js: 5ms, proxy.ts: 7ms, application-code: 225ms)[22m
+ GET /api/admin/payments [32m200[39m in 238ms[2m (next.js: 2ms, proxy.ts: 6ms, application-code: 229ms)[22m
+ GET /admin [32m200[39m in 203ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 194ms)[22m
+ GET /admin/users [32m200[39m in 28ms[2m (next.js: 4ms, proxy.ts: 6ms, application-code: 18ms)[22m
+ GET /api/admin/users [32m200[39m in 290ms[2m (next.js: 4ms, proxy.ts: 8ms, application-code: 278ms)[22m
+ GET /api/admin/users [32m200[39m in 252ms[2m (next.js: 3ms, proxy.ts: 9ms, application-code: 240ms)[22m
+ POST /admin/users [32m200[39m in 453ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 443ms)[22m
+  └─ ƒ extendTrial("d3fda87b-bcda-4a6c-ac13-06d203cdb809", 7) in 290ms [2mapp/admin/actions.ts[22m
+ GET /api/admin/users [32m200[39m in 254ms[2m (next.js: 2ms, proxy.ts: 6ms, application-code: 246ms)[22m
+ GET / [32m200[39m in 93ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 84ms)[22m
+ GET /auth/login [32m200[39m in 1574ms[2m (next.js: 1500ms, proxy.ts: 9ms, application-code: 65ms)[22m
+ GET /admin [32m200[39m in 475ms[2m (next.js: 5ms, proxy.ts: 7ms, application-code: 463ms)[22m
+ GET /dashboard [32m200[39m in 404ms[2m (next.js: 8ms, proxy.ts: 7ms, application-code: 390ms)[22m
+ POST /api/generate-picklist [32m200[39m in 1096ms[2m (next.js: 993ms, proxy.ts: 23ms, application-code: 80ms)[22m
+ GET /dashboard/costing [32m200[39m in 632ms[2m (next.js: 601ms, proxy.ts: 7ms, application-code: 24ms)[22m
+ GET /dashboard/flipkart [32m200[39m in 285ms[2m (next.js: 243ms, proxy.ts: 8ms, application-code: 34ms)[22m
+ POST /api/parse-excel [32m200[39m in 4.9s[2m (next.js: 2.0s, proxy.ts: 1610ms, application-code: 1289ms)[22m
+ GET /dashboard/myntra [32m200[39m in 94ms[2m (next.js: 55ms, proxy.ts: 9ms, application-code: 30ms)[22m
+ POST /api/analyze-myntra [32m200[39m in 4.4s[2m (next.js: 554ms, proxy.ts: 3.7s, application-code: 66ms)[22m
+ GET /dashboard/subscription [32m200[39m in 100ms[2m (next.js: 52ms, proxy.ts: 11ms, application-code: 37ms)[22m
+ GET /dashboard [32m200[39m in 34ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 24ms)[22m
+ GET /dashboard/costing [32m200[39m in 43ms[2m (next.js: 5ms, proxy.ts: 9ms, application-code: 28ms)[22m
+ GET /dashboard [32m200[39m in 33ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 23ms)[22m
+ POST /api/generate-picklist [32m200[39m in 511ms[2m (next.js: 393ms, proxy.ts: 10ms, application-code: 108ms)[22m
+[32m[1m✓[22m[39m Compiled in 8s
+ GET / [32m200[39m in 430ms[2m (next.js: 276ms, proxy.ts: 30ms, application-code: 124ms)[22m
+ GET /dashboard [32m200[39m in 6.0s[2m (next.js: 37ms, proxy.ts: 5.6s, application-code: 328ms)[22m
+ GET / [32m200[39m in 137ms[2m (next.js: 70ms, proxy.ts: 6ms, application-code: 61ms)[22m
+ GET /dashboard [32m200[39m in 431ms[2m (next.js: 5ms, proxy.ts: 136ms, application-code: 291ms)[22m
+ GET / [32m200[39m in 86ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 78ms)[22m
+ GET / [32m200[39m in 91ms[2m (next.js: 4ms, proxy.ts: 4ms, application-code: 83ms)[22m
+ GET /dashboard [32m200[39m in 394ms[2m (next.js: 4ms, proxy.ts: 119ms, application-code: 271ms)[22m
+ GET / [32m200[39m in 69ms[2m (next.js: 3ms, proxy.ts: 5ms, application-code: 61ms)[22m
+ GET /dashboard [32m200[39m in 419ms[2m (next.js: 17ms, proxy.ts: 124ms, application-code: 279ms)[22m
+ GET / [32m200[39m in 85ms[2m (next.js: 3ms, proxy.ts: 4ms, application-code: 78ms)[22m
+ GET / [32m200[39m in 69ms[2m (next.js: 19ms, proxy.ts: 8ms, application-code: 42ms)[22m
+ GET /dashboard [32m200[39m in 455ms[2m (next.js: 16ms, proxy.ts: 153ms, application-code: 286ms)[22m
+ GET / [32m200[39m in 38ms[2m (next.js: 3ms, proxy.ts: 3ms, application-code: 33ms)[22m
+ GET /dashboard [32m200[39m in 414ms[2m (next.js: 53ms, proxy.ts: 122ms, application-code: 239ms)[22m
+ GET / [32m200[39m in 71ms[2m (next.js: 18ms, proxy.ts: 5ms, application-code: 48ms)[22m
+ GET / [32m200[39m in 55ms[2m (next.js: 3ms, proxy.ts: 3ms, application-code: 48ms)[22m
+ GET /dashboard [32m200[39m in 374ms[2m (next.js: 21ms, proxy.ts: 115ms, application-code: 238ms)[22m
+ GET /dashboard [32m200[39m in 375ms[2m (next.js: 4ms, proxy.ts: 118ms, application-code: 253ms)[22m
+ GET /dashboard [32m200[39m in 372ms[2m (next.js: 10ms, proxy.ts: 113ms, application-code: 249ms)[22m
+ GET /dashboard [32m200[39m in 379ms[2m (next.js: 7ms, proxy.ts: 132ms, application-code: 239ms)[22m
+ GET /dashboard [32m200[39m in 923ms[2m (next.js: 51ms, proxy.ts: 29ms, application-code: 843ms)[22m
+[32m[1m✓[22m[39m Compiled in 1196ms
+ GET / [32m200[39m in 80ms[2m (next.js: 10ms, proxy.ts: 13ms, application-code: 56ms)[22m
+ GET / [32m200[39m in 76ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 67ms)[22m
+ GET / [32m200[39m in 59ms[2m (next.js: 5ms, proxy.ts: 7ms, application-code: 47ms)[22m
+ GET / [32m200[39m in 97ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 88ms)[22m
+ GET / [32m200[39m in 180ms[2m (next.js: 59ms, proxy.ts: 6ms, application-code: 115ms)[22m
+ GET / [32m200[39m in 60ms[2m (next.js: 5ms, proxy.ts: 9ms, application-code: 45ms)[22m
+ GET / [32m200[39m in 84ms[2m (next.js: 4ms, proxy.ts: 8ms, application-code: 73ms)[22m
+ GET / [32m200[39m in 62ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 53ms)[22m
+ GET / [32m200[39m in 51ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 42ms)[22m
+ GET / [32m200[39m in 56ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 47ms)[22m
+ GET /dashboard [32m200[39m in 1349ms[2m (next.js: 20ms, proxy.ts: 7ms, application-code: 1322ms)[22m
+ GET /dashboard [32m200[39m in 391ms[2m (next.js: 13ms, proxy.ts: 6ms, application-code: 371ms)[22m
+ GET /dashboard/costing [32m200[39m in 50ms[2m (next.js: 10ms, proxy.ts: 6ms, application-code: 34ms)[22m
+ GET /dashboard/costing [32m200[39m in 430ms[2m (next.js: 7ms, proxy.ts: 7ms, application-code: 416ms)[22m
+ GET /dashboard [32m200[39m in 26ms[2m (next.js: 6ms, proxy.ts: 5ms, application-code: 15ms)[22m
+ GET /dashboard/flipkart [32m200[39m in 224ms[2m (next.js: 183ms, proxy.ts: 7ms, application-code: 34ms)[22m
+ GET /dashboard/myntra [32m200[39m in 36ms[2m (next.js: 7ms, proxy.ts: 7ms, application-code: 22ms)[22m
+ GET /dashboard/subscription [32m200[39m in 37ms[2m (next.js: 6ms, proxy.ts: 11ms, application-code: 20ms)[22m
+ GET /dashboard/myntra [32m200[39m in 41ms[2m (next.js: 5ms, proxy.ts: 7ms, application-code: 30ms)[22m
+ GET /dashboard [32m200[39m in 63ms[2m (next.js: 33ms, proxy.ts: 6ms, application-code: 24ms)[22m
+ GET /dashboard [32m200[39m in 26ms[2m (next.js: 3ms, proxy.ts: 7ms, application-code: 16ms)[22m
+ GET /dashboard [32m200[39m in 31ms[2m (next.js: 2ms, proxy.ts: 6ms, application-code: 23ms)[22m
+ GET /dashboard [32m200[39m in 607ms[2m (next.js: 122ms, proxy.ts: 7ms, application-code: 478ms)[22m
+ GET / [32m200[39m in 63ms[2m (next.js: 19ms, proxy.ts: 3ms, application-code: 40ms)[22m
+ GET / [32m200[39m in 140ms[2m (next.js: 3ms, proxy.ts: 6ms, application-code: 130ms)[22m
+ GET /auth/sign-up [32m200[39m in 2.1s[2m (next.js: 2.1s, proxy.ts: 5ms, application-code: 29ms)[22m
+ GET / [32m200[39m in 55ms[2m (next.js: 5ms, proxy.ts: 4ms, application-code: 45ms)[22m
+ GET / [32m200[39m in 21ms[2m (next.js: 4ms, proxy.ts: 5ms, application-code: 11ms)[22m
