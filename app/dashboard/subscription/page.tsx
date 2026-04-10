@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DashboardHeader } from '@/components/dashboard/sidebar'
 import { Button } from '@/components/ui/button'
@@ -14,18 +14,11 @@ import {
   Upload,
   Loader2,
   Copy,
+  Star,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-const freePlanFeatures = [
-  '14-day free trial',
-  'Up to 100 orders/day',
-  'Basic SKU mapping',
-  'CSV export only',
-  'Community support',
-]
-
-const proPlanFeatures = [
+const proFeatures = [
   'Unlimited orders',
   'All platforms (Flipkart, Myntra, Meesho)',
   'Smart fuzzy SKU matching',
@@ -36,6 +29,33 @@ const proPlanFeatures = [
   'Priority email support',
 ]
 
+const plans = [
+  {
+    id: '1month',
+    label: '1 Month',
+    price: 3000,
+    per: 'month',
+    badge: null,
+    saving: null,
+  },
+  {
+    id: '3month',
+    label: '3 Months',
+    price: 7000,
+    per: '3 months',
+    badge: 'Save ₹2,000',
+    saving: '₹2,000 saved vs monthly',
+  },
+  {
+    id: 'yearly',
+    label: 'Yearly',
+    price: 18000,
+    per: 'year',
+    badge: 'Best Value',
+    saving: '₹18,000 saved vs monthly',
+  },
+]
+
 type Step = 'plans' | 'payment' | 'success'
 
 function copyToClipboard(text: string, label: string) {
@@ -44,13 +64,36 @@ function copyToClipboard(text: string, label: string) {
 
 export default function SubscriptionPage() {
   const [step, setStep] = useState<Step>('plans')
+  const [selectedPlan, setSelectedPlan] = useState(plans[0])
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [isPro, setIsPro] = useState(false)
+  const [loadingPlan, setLoadingPlan] = useState(true)
+
+  useEffect(() => {
+    async function fetchPlan() {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
+        const { data } = await supabase
+          .from('users_plan')
+          .select('plan_type')
+          .eq('user_id', user.id)
+          .single()
+        setIsPro(data?.plan_type === 'pro')
+      } catch {
+        // ignore
+      } finally {
+        setLoadingPlan(false)
+      }
+    }
+    fetchPlan()
+  }, [])
 
   const handleSubmit = async () => {
     if (!screenshot) return
     setUploading(true)
-
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
@@ -73,14 +116,14 @@ export default function SubscriptionPage() {
       const { error: insertError } = await supabase.from('payment_requests').insert({
         user_id: user.id,
         email: user.email,
-        amount: 999,
+        amount: selectedPlan.price,
         screenshot_url: screenshotUrl,
         status: 'pending',
       })
 
       if (insertError) {
         console.warn('Payment request save failed:', insertError.message)
-        toast.warning('Payment submitted, but our tracking could not save it. Please WhatsApp us the screenshot too.')
+        toast.warning('Payment submitted, but tracking could not save it. Please WhatsApp us the screenshot too.')
       } else {
         toast.success('Payment submitted! We will verify within 24 hours.')
       }
@@ -96,12 +139,11 @@ export default function SubscriptionPage() {
 
   return (
     <>
-      <DashboardHeader
-        title="Subscription"
-        description="Manage your plan and billing"
-      />
+      <DashboardHeader title="Subscription" description="Manage your plan and billing" />
 
       <div className="flex flex-1 flex-col gap-8 p-6">
+
+        {/* ── PLANS STEP ── */}
         {step === 'plans' && (
           <>
             <div className="text-center">
@@ -111,72 +153,125 @@ export default function SubscriptionPage() {
               </p>
             </div>
 
-            <div className="mx-auto grid w-full max-w-3xl gap-6 sm:grid-cols-2">
-              <Card className="relative border-2">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
-                      <Zap className="h-5 w-5 text-muted-foreground" />
+            {loadingPlan ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : isPro ? (
+              /* ── Already Pro ── */
+              <div className="mx-auto w-full max-w-sm">
+                <Card className="border-2 border-primary shadow-md">
+                  <CardContent className="p-8 text-center">
+                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                      <Crown className="h-7 w-7 text-primary" />
                     </div>
-                    <div>
-                      <p className="font-semibold">Free Trial</p>
-                      <Badge variant="secondary" className="text-xs">14 Days</Badge>
-                    </div>
-                  </div>
-                  <div className="mb-6">
-                    <span className="text-3xl font-bold">₹0</span>
-                    <span className="text-muted-foreground text-sm"> / 14 days</span>
-                  </div>
-                  <ul className="space-y-2.5 mb-6">
-                    {freePlanFeatures.map((f) => (
-                      <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <CheckCircle2 className="h-4 w-4 shrink-0 text-muted-foreground/60" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <Button variant="outline" className="w-full" disabled>
-                    Current Plan (Trial)
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card className="relative border-2 border-primary shadow-md">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge className="px-3 py-1 text-xs">Most Popular</Badge>
+                    <h3 className="text-xl font-bold">You're on Pro!</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Enjoy unlimited access to all SmartSeller Suite features.
+                    </p>
+                    <ul className="mt-6 space-y-2 text-left">
+                      {proFeatures.map((f) => (
+                        <li key={f} className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                    <Button className="mt-6 w-full" disabled variant="outline">
+                      <CheckCircle2 className="mr-2 h-4 w-4 text-primary" />
+                      Current Plan (Pro)
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : (
+              /* ── Not Pro — show plan selector ── */
+              <div className="mx-auto w-full max-w-4xl space-y-6">
+                {/* Free trial note */}
+                <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                  <Zap className="h-4 w-4 shrink-0" />
+                  You are currently on the <span className="font-medium text-foreground">14-day Free Trial</span>. Upgrade below to keep full access.
                 </div>
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                      <Crown className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="font-semibold">Pro Plan</p>
-                      <Badge className="text-xs">Recommended</Badge>
-                    </div>
-                  </div>
-                  <div className="mb-6">
-                    <span className="text-3xl font-bold">₹999</span>
-                    <span className="text-muted-foreground text-sm"> / month</span>
-                  </div>
-                  <ul className="space-y-2.5 mb-6">
-                    {proPlanFeatures.map((f) => (
-                      <li key={f} className="flex items-center gap-2 text-sm">
-                        <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                  <Button className="w-full" onClick={() => setStep('payment')}>
-                    Upgrade Now
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
+
+                {/* Pro plan cards */}
+                <div className="grid gap-4 sm:grid-cols-3">
+                  {plans.map((plan) => {
+                    const isSelected = selectedPlan.id === plan.id
+                    return (
+                      <button
+                        key={plan.id}
+                        onClick={() => setSelectedPlan(plan)}
+                        className={`relative rounded-xl border-2 p-5 text-left transition-all ${
+                          isSelected
+                            ? 'border-primary bg-primary/5 shadow-md'
+                            : 'border-border bg-card hover:border-primary/40 hover:bg-muted/30'
+                        }`}
+                      >
+                        {plan.badge && (
+                          <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                            <Badge className={`px-3 py-0.5 text-xs ${plan.badge === 'Best Value' ? 'bg-amber-500 hover:bg-amber-500' : ''}`}>
+                              {plan.badge === 'Best Value' && <Star className="mr-1 h-3 w-3" />}
+                              {plan.badge}
+                            </Badge>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 mb-3">
+                          <Crown className={`h-4 w-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                          <span className="font-semibold">{plan.label}</span>
+                        </div>
+                        <div className="mb-1">
+                          <span className="text-2xl font-bold">₹{plan.price.toLocaleString('en-IN')}</span>
+                          <span className="text-sm text-muted-foreground"> / {plan.per}</span>
+                        </div>
+                        {plan.saving && (
+                          <p className="text-xs text-green-600 font-medium mt-1">{plan.saving}</p>
+                        )}
+                        {!plan.saving && (
+                          <p className="text-xs text-muted-foreground mt-1">Standard rate</p>
+                        )}
+                        {isSelected && (
+                          <div className="mt-3 flex items-center gap-1 text-xs font-semibold text-primary">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Selected
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Features included */}
+                <Card className="border">
+                  <CardContent className="p-5">
+                    <p className="text-sm font-semibold mb-3 flex items-center gap-2">
+                      <Crown className="h-4 w-4 text-primary" />
+                      All Pro plans include
+                    </p>
+                    <ul className="grid gap-2 sm:grid-cols-2">
+                      {proFeatures.map((f) => (
+                        <li key={f} className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={() => setStep('payment')}
+                >
+                  Continue with {selectedPlan.label} — ₹{selectedPlan.price.toLocaleString('en-IN')}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </>
         )}
 
+        {/* ── PAYMENT STEP ── */}
         {step === 'payment' && (
           <div className="mx-auto w-full max-w-lg space-y-6">
             <div>
@@ -196,7 +291,7 @@ export default function SubscriptionPage() {
               <CardContent className="p-5">
                 <p className="text-sm font-semibold text-primary mb-4 flex items-center gap-2">
                   <Crown className="h-4 w-4" />
-                  Pro Plan — ₹999/month
+                  Pro Plan — {selectedPlan.label} — ₹{selectedPlan.price.toLocaleString('en-IN')}
                 </p>
                 <div className="space-y-3 text-sm">
                   {[
@@ -281,6 +376,7 @@ export default function SubscriptionPage() {
           </div>
         )}
 
+        {/* ── SUCCESS STEP ── */}
         {step === 'success' && (
           <div className="mx-auto w-full max-w-md text-center">
             <Card className="shadow-sm">
@@ -305,6 +401,7 @@ export default function SubscriptionPage() {
             </Card>
           </div>
         )}
+
       </div>
     </>
   )

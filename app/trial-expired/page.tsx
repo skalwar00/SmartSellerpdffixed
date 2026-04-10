@@ -77,9 +77,16 @@ export default function TrialExpiredPage() {
   )
 }
 
+const pricingPlans = [
+  { id: '1month', label: '1 Month', price: 3000, per: 'month', badge: null as string | null, saving: null as string | null },
+  { id: '3month', label: '3 Months', price: 7000, per: '3 months', badge: 'Save ₹2,000', saving: '₹2,000 saved' },
+  { id: 'yearly', label: 'Yearly', price: 18000, per: 'year', badge: 'Best Value', saving: '₹18,000 saved' },
+]
+
 function UpgradeForm({ onBack }: { onBack: () => void }) {
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const [submitted, setSubmitted] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState(pricingPlans[0])
 
   if (submitted) {
     return (
@@ -112,15 +119,40 @@ function UpgradeForm({ onBack }: { onBack: () => void }) {
         </button>
         <h2 className="text-xl font-bold">Upgrade to Pro</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Complete payment and upload screenshot for verification.
+          Select a plan, complete payment, then upload your screenshot.
         </p>
+
+        {/* Plan selector */}
+        <div className="mt-5 grid grid-cols-3 gap-2">
+          {pricingPlans.map((plan) => {
+            const isSelected = selectedPlan.id === plan.id
+            return (
+              <button
+                key={plan.id}
+                onClick={() => setSelectedPlan(plan)}
+                className={`relative rounded-lg border-2 p-3 text-left transition-all ${
+                  isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'
+                }`}
+              >
+                {plan.badge && (
+                  <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground whitespace-nowrap">
+                    {plan.badge}
+                  </span>
+                )}
+                <p className="text-xs font-semibold">{plan.label}</p>
+                <p className="text-sm font-bold mt-0.5">₹{plan.price.toLocaleString('en-IN')}</p>
+                {plan.saving && <p className="text-[10px] text-green-600 mt-0.5">{plan.saving}</p>}
+              </button>
+            )
+          })}
+        </div>
 
         <div className="mt-5 rounded-xl bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 p-5">
           <p className="text-sm font-semibold text-primary mb-3">Payment Details</p>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Plan</span>
-              <span className="font-medium">Pro Plan — ₹999/month</span>
+              <span className="font-medium">Pro — {selectedPlan.label} — ₹{selectedPlan.price.toLocaleString('en-IN')}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">UPI ID</span>

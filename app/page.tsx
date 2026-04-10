@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { LandingHeader } from '@/components/landing-header'
 import { 
   BarChart3, 
   Package, 
@@ -212,24 +213,69 @@ export default function LandingPage() {
               Start with a 14-day free trial. No credit card required.
             </p>
           </div>
-          <div className="mx-auto mt-12 max-w-md">
-            <div className="rounded-2xl border bg-card p-8 shadow-sm">
-              <div className="text-center">
-                <h3 className="text-lg font-semibold">Pro Plan</h3>
-                <div className="mt-4 flex items-baseline justify-center gap-1">
-                  <span className="text-4xl font-bold">Free</span>
-                  <span className="text-muted-foreground">/14 days</span>
-                </div>
+
+          <div className="mx-auto mt-12 grid max-w-4xl gap-6 sm:grid-cols-3">
+            {/* 1 Month */}
+            <div className="rounded-2xl border bg-card p-7 shadow-sm">
+              <h3 className="text-base font-semibold">1 Month</h3>
+              <div className="mt-3 flex items-baseline gap-1">
+                <span className="text-3xl font-bold">₹3,000</span>
+                <span className="text-sm text-muted-foreground">/month</span>
               </div>
-              <ul className="mt-8 space-y-4">
+              <p className="mt-1 text-xs text-muted-foreground">Standard rate</p>
+              <ul className="mt-6 space-y-3">
                 <PricingFeature>Unlimited order processing</PricingFeature>
-                <PricingFeature>Unlimited SKU mappings</PricingFeature>
                 <PricingFeature>All platform integrations</PricingFeature>
                 <PricingFeature>Profit analytics dashboard</PricingFeature>
-                <PricingFeature>4x6 PDF picklist generation</PricingFeature>
+                <PricingFeature>PDF picklist generation</PricingFeature>
+                <PricingFeature>Design-level costing</PricingFeature>
+              </ul>
+              <Button className="mt-8 w-full" variant="outline" size="lg" asChild>
+                <Link href="/auth/sign-up">Start free trial</Link>
+              </Button>
+            </div>
+
+            {/* 3 Months */}
+            <div className="relative rounded-2xl border-2 border-primary bg-card p-7 shadow-md">
+              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
+                  Save ₹2,000
+                </span>
+              </div>
+              <h3 className="text-base font-semibold">3 Months</h3>
+              <div className="mt-3 flex items-baseline gap-1">
+                <span className="text-3xl font-bold">₹7,000</span>
+                <span className="text-sm text-muted-foreground">/3 months</span>
+              </div>
+              <p className="mt-1 text-xs text-green-600 font-medium">₹2,000 saved vs monthly</p>
+              <ul className="mt-6 space-y-3">
+                <PricingFeature>Unlimited order processing</PricingFeature>
+                <PricingFeature>All platform integrations</PricingFeature>
+                <PricingFeature>Profit analytics dashboard</PricingFeature>
+                <PricingFeature>PDF picklist generation</PricingFeature>
                 <PricingFeature>Design-level costing</PricingFeature>
               </ul>
               <Button className="mt-8 w-full" size="lg" asChild>
+                <Link href="/auth/sign-up">Start free trial</Link>
+              </Button>
+            </div>
+
+            {/* Yearly */}
+            <div className="rounded-2xl border bg-card p-7 shadow-sm">
+              <h3 className="text-base font-semibold">Yearly</h3>
+              <div className="mt-3 flex items-baseline gap-1">
+                <span className="text-3xl font-bold">₹18,000</span>
+                <span className="text-sm text-muted-foreground">/year</span>
+              </div>
+              <p className="mt-1 text-xs text-green-600 font-medium">₹18,000 saved vs monthly</p>
+              <ul className="mt-6 space-y-3">
+                <PricingFeature>Unlimited order processing</PricingFeature>
+                <PricingFeature>All platform integrations</PricingFeature>
+                <PricingFeature>Profit analytics dashboard</PricingFeature>
+                <PricingFeature>PDF picklist generation</PricingFeature>
+                <PricingFeature>Design-level costing</PricingFeature>
+              </ul>
+              <Button className="mt-8 w-full" variant="outline" size="lg" asChild>
                 <Link href="/auth/sign-up">Start free trial</Link>
               </Button>
             </div>
