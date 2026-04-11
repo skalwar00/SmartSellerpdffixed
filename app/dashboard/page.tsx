@@ -17,7 +17,10 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { FileDropzone } from '@/components/ui/file-dropzone'
 import { toast } from 'sonner'
-import { Download, Save, RefreshCw, Loader2, Package, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Plus, X } from 'lucide-react'
+import {
+  Download, Save, RefreshCw, Loader2, Package, CheckCircle2, AlertCircle,
+  ChevronDown, ChevronUp, Plus, X, Send, Trash2, Copy, Radio,
+} from 'lucide-react'
 import useSWR, { mutate } from 'swr'
 
 function SearchableSelect({
@@ -116,6 +119,13 @@ interface MappingRow {
   comboSkus?: string[]
 }
 
+interface LiveItem {
+  master_sku: string
+  total_qty: number
+  picked_qty: number
+  status: 'pending' | 'picked' | 'updated'
+}
+
 // Token Set Ratio - matches thefuzz behavior
 function tokenSetRatio(str1: string, str2: string): number {
   const s1 = str1.toUpperCase().trim()
@@ -173,7 +183,6 @@ async function fetchUserData() {
     mappingDict[item.portal_sku.toUpperCase()] = item.master_sku
   })
   const masterOptions = inventoryRes.data?.map(i => i.master_sku.toUpperCase()) || []
-  // Read preferences from user metadata (no DB migration needed)
   const isComboEnabled = (user.user_metadata?.is_combo_enabled as boolean) ?? false
   const comboMappings = (user.user_metadata?.combo_mappings as Record<string, string[]>) || {}
   return { mappingDict, masterOptions, userId: user.id, isComboEnabled, comboMappings }
@@ -206,10 +215,48 @@ export default function PicklistPage() {
   const [isSavingMappings, setIsSavingMappings] = useState(false)
   const [isProcessingOrders, setIsProcessingOrders] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isPushing, setIsPushing] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [liveItems, setLiveItems] = useState<LiveItem[]>([])
+  const [shortUserId, setShortUserId] = useState<string | null>(null)
+  const [securityPin, setSecurityPin] = useState<string | null>(null)
   const isProcessing = isSyncingMaster || isSavingMappings || isProcessingOrders || isGenerating
   const [masterFiles, setMasterFiles] = useState<File[]>([])
   const [orderFiles, setOrderFiles] = useState<File[]>([])
   const [isMasterOpen, setIsMasterOpen] = useState(false)
+
+  // Setup: load short_user_id & pin + live items — only after auth is confirmed by SWR
+  useEffect(() => {
+    if (!data?.userId) return
+    async function setup() {
+      try {
+        const setupRes = await fetch('/api/picklist/setup', { method: 'POST' })
+        if (setupRes.ok) {
+          const setupJson = await setupRes.json()
+          setShortUserId(setupJson.short_user_id)
+          setSecurityPin(setupJson.security_pin)
+        }
+      } catch { /* silent */ }
+      try {
+        const itemsRes = await fetch('/api/picklist/items')
+        if (itemsRes.ok) {
+          const itemsJson = await itemsRes.json()
+          setLiveItems(itemsJson.items || [])
+        }
+      } catch { /* silent */ }
+    }
+    setup()
+  }, [data?.userId])
+
+  // Supabase Realtime: broadcast when we push, listen for self-updates
+  useEffect(() => {
+    if (!shortUserId) return
+    const supabase = createClient()
+    const channel = supabase.channel(`picklist:${shortUserId}`)
+    channel.subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [shortUserId])
 
   const findSkuColumn = (headers: string[]): number => {
     const normalizedHeaders = headers.map(h => h.trim().toLowerCase())
@@ -270,7 +317,6 @@ export default function PicklistPage() {
         }
       }
 
-      // Expand combo orders into one row per master SKU
       const mappedOrders = allOrders.flatMap(order => {
         const comboSkus = data.comboMappings[order.Portal_SKU]
         if (comboSkus && comboSkus.length > 0) {
@@ -280,7 +326,6 @@ export default function PicklistPage() {
       })
       setOrders(mappedOrders)
 
-      // Only show unmapped for portal SKUs that have no mapping at all (neither simple nor combo)
       const unmapped = [...new Set(
         allOrders
           .filter(o => !data.mappingDict[o.Portal_SKU] && !data.comboMappings[o.Portal_SKU])
@@ -363,7 +408,6 @@ export default function PicklistPage() {
     const prevOrders = orders
     const prevUnmapped = unmappedRows
 
-    // Optimistic update: expand combo rows into multiple order rows
     setOrders(prev => {
       const result: OrderData[] = []
       for (const order of prev) {
@@ -388,7 +432,6 @@ export default function PicklistPage() {
     try {
       const supabase = createClient()
 
-      // Save combo mappings to user metadata (no DB column needed)
       const comboRows = toSave.filter(row => (row.comboSkus || []).filter(Boolean).length > 0)
       if (comboRows.length > 0) {
         const { data: { user } } = await supabase.auth.getUser()
@@ -405,7 +448,6 @@ export default function PicklistPage() {
         await supabase.auth.updateUser({ data: { combo_mappings: updatedCombo } })
       }
 
-      // Save primary SKU to DB (no components column — works without migration)
       const records = toSave.map(row => ({
         user_id: data.userId,
         portal_sku: row.portalSku,
@@ -422,6 +464,82 @@ export default function PicklistPage() {
     } finally {
       setIsSavingMappings(false)
     }
+  }
+
+  // Aggregate mapped orders into master_sku -> total_qty
+  const getAggregatedItems = () => {
+    const agg: Record<string, number> = {}
+    for (const order of orders) {
+      if (order.Master_SKU) {
+        agg[order.Master_SKU] = (agg[order.Master_SKU] || 0) + order.Qty
+      }
+    }
+    return Object.entries(agg).map(([master_sku, total_qty]) => ({ master_sku, total_qty }))
+  }
+
+  const handlePushToLive = async () => {
+    const items = getAggregatedItems()
+    if (items.length === 0) {
+      toast.error('No mapped orders to push')
+      return
+    }
+    setIsPushing(true)
+    try {
+      const res = await fetch('/api/picklist/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      })
+      if (!res.ok) throw new Error('Push failed')
+      const json = await res.json()
+
+      // Reload live items
+      const itemsRes = await fetch('/api/picklist/items')
+      if (itemsRes.ok) {
+        const itemsJson = await itemsRes.json()
+        setLiveItems(itemsJson.items || [])
+
+        // Broadcast to packer via Supabase Realtime
+        if (shortUserId) {
+          const supabase = createClient()
+          await supabase.channel(`picklist:${shortUserId}`).send({
+            type: 'broadcast',
+            event: 'picklist_update',
+            payload: { items: itemsJson.items },
+          })
+        }
+      }
+
+      toast.success(`Pushed ${json.pushed} SKUs to live picklist!`)
+    } catch (err) {
+      toast.error('Failed to push picklist')
+      console.error(err)
+    } finally {
+      setIsPushing(false)
+    }
+  }
+
+  const handleResetPicklist = async () => {
+    setIsResetting(true)
+    try {
+      const res = await fetch('/api/picklist/reset', { method: 'POST' })
+      if (!res.ok) throw new Error('Reset failed')
+      setLiveItems([])
+      setShowResetConfirm(false)
+      toast.success('Picklist reset successfully')
+    } catch (err) {
+      toast.error('Failed to reset picklist')
+      console.error(err)
+    } finally {
+      setIsResetting(false)
+    }
+  }
+
+  const handleCopyLink = () => {
+    if (!shortUserId) return
+    const link = `${window.location.origin}/packer/${shortUserId}`
+    navigator.clipboard.writeText(link)
+    toast.success('Packer link copied! Share on WhatsApp.')
   }
 
   const handleGeneratePicklist = async () => {
@@ -451,6 +569,33 @@ export default function PicklistPage() {
     }
   }
 
+  const handleDownloadFromDB = async () => {
+    if (liveItems.length === 0) { toast.error('No live picklist data in database'); return }
+    setIsGenerating(true)
+    try {
+      const orders = liveItems.map(item => ({ Master_SKU: item.master_sku, Qty: item.total_qty }))
+      const res = await fetch('/api/generate-picklist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orders }),
+      })
+      if (!res.ok) throw new Error('Failed to generate picklist')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `picklist-live.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Live picklist PDF downloaded!')
+    } catch (err) {
+      toast.error('Failed to generate picklist')
+      console.error(err)
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
   const updateRow = (idx: number, changes: Partial<MappingRow>) => {
     setUnmappedRows(prev => prev.map((r, i) => i === idx ? { ...r, ...changes } : r))
   }
@@ -458,26 +603,18 @@ export default function PicklistPage() {
   const addComboSku = (idx: number) => {
     setUnmappedRows(prev => prev.map((r, i) => {
       if (i !== idx) return r
-
       const usedSkus = new Set([r.masterSku, ...(r.comboSkus || [])])
       const available = (data?.masterOptions || []).filter(o => o && !usedSkus.has(o))
       if (available.length === 0) return { ...r, comboSkus: [...(r.comboSkus || []), ''] }
-
-      // Build a smarter query for the next combo slot:
-      // - Find tokens in the portal SKU that are NOT in any already-selected master SKU
-      //   (these are the "remaining" discriminating tokens, e.g. NAVY after OLIVE was picked)
-      // - Also keep size-like tokens (8XL, L, XL…) so the size stays correct
       const portalTokens = r.portalSku.toUpperCase().split(/[-_()+\s]+/).filter(Boolean)
       const claimedTokens = new Set<string>()
       ;[r.masterSku, ...(r.comboSkus || [])].filter(Boolean).forEach(sku => {
         sku.toUpperCase().split(/[-_\s]+/).filter(Boolean).forEach(t => claimedTokens.add(t))
       })
-
       const isSize = (t: string) => /^\d+[A-Z]*$|^[SML]{1,2}$/.test(t)
       const uniqueTokens = portalTokens.filter(t => !claimedTokens.has(t))
       const sizeTokens   = portalTokens.filter(t => claimedTokens.has(t) && isSize(t))
       const query = [...uniqueTokens, ...sizeTokens].join(' ') || r.portalSku
-
       let bestMatch = available[0]
       let bestScore = 0
       for (const masterSku of available) {
@@ -518,6 +655,12 @@ export default function PicklistPage() {
   const unmappedCount = orders.filter(o => !o.Master_SKU).length
   const isComboEnabled = data?.isComboEnabled ?? false
 
+  // Live picklist stats
+  const liveTotalQty = liveItems.reduce((s, i) => s + i.total_qty, 0)
+  const livePickedQty = liveItems.reduce((s, i) => s + i.picked_qty, 0)
+  const livePickedItems = liveItems.filter(i => i.status === 'picked').length
+  const livePct = liveTotalQty > 0 ? Math.round((livePickedQty / liveTotalQty) * 100) : 0
+
   return (
     <>
       <DashboardHeader
@@ -526,6 +669,130 @@ export default function PicklistPage() {
       />
 
       <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
+
+        {/* Live Picklist Panel */}
+        <Card className={liveItems.length > 0 ? 'border-blue-200 bg-blue-50/30' : ''}>
+          <CardHeader>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Radio className="h-4 w-4 text-blue-500" />
+                Live Picklist
+                {liveItems.length > 0 && (
+                  <Badge variant="secondary" className="gap-1 bg-blue-100 text-blue-700">
+                    {liveItems.length} SKUs
+                  </Badge>
+                )}
+              </CardTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                {shortUserId && (
+                  <Button variant="outline" size="sm" onClick={handleCopyLink}>
+                    <Copy className="h-3.5 w-3.5 mr-1.5" />
+                    Copy Packer Link
+                  </Button>
+                )}
+                {liveItems.length > 0 && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={handleDownloadFromDB} disabled={isGenerating}>
+                      {isGenerating ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1.5" />}
+                      PDF from DB
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-red-200 text-red-600 hover:bg-red-50"
+                      onClick={() => setShowResetConfirm(true)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                      Reset
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+            {securityPin && (
+              <CardDescription>
+                Packer PIN: <span className="font-mono font-bold text-foreground">{securityPin}</span>
+                {shortUserId && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    · /packer/{shortUserId}
+                  </span>
+                )}
+              </CardDescription>
+            )}
+          </CardHeader>
+
+          {liveItems.length > 0 && (
+            <CardContent className="pt-0 space-y-3">
+              <div>
+                <div className="flex items-center justify-between text-sm mb-1.5">
+                  <span className="text-muted-foreground">Progress: {livePickedItems}/{liveItems.length} SKUs picked</span>
+                  <span className="font-semibold text-foreground">{livePct}%</span>
+                </div>
+                <div className="w-full bg-muted rounded-full h-3">
+                  <div
+                    className="h-3 rounded-full bg-green-500 transition-all duration-500"
+                    style={{ width: `${livePct}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {livePickedQty} of {liveTotalQty} units picked
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center">
+                {[
+                  { label: 'Pending', count: liveItems.filter(i => i.status === 'pending').length, color: 'text-gray-600' },
+                  { label: 'Updated', count: liveItems.filter(i => i.status === 'updated').length, color: 'text-orange-600' },
+                  { label: 'Picked', count: livePickedItems, color: 'text-green-600' },
+                ].map(({ label, count, color }) => (
+                  <div key={label} className="rounded-lg bg-background border p-2">
+                    <p className={`text-lg font-bold ${color}`}>{count}</p>
+                    <p className="text-xs text-muted-foreground">{label}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          )}
+
+          {liveItems.length === 0 && (
+            <CardContent className="pt-0">
+              <p className="text-sm text-muted-foreground">
+                No active picklist. Upload orders and click "Push to Live Picklist" to start.
+              </p>
+            </CardContent>
+          )}
+        </Card>
+
+        {/* Reset Confirmation */}
+        {showResetConfirm && (
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="pt-4">
+              <p className="text-sm font-medium text-red-800 mb-3">
+                Are you sure you want to reset the entire picklist? All {liveItems.length} items and picked progress will be deleted.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleResetPicklist}
+                  disabled={isResetting}
+                >
+                  {isResetting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1.5 h-3.5 w-3.5" />}
+                  Yes, Reset
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowResetConfirm(false)}
+                  disabled={isResetting}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader
             className="cursor-pointer select-none"
@@ -619,18 +886,32 @@ export default function PicklistPage() {
                     <span className="text-amber-700 font-medium">{unmappedCount} unmapped</span>
                   </div>
                 )}
-                <Button
-                  onClick={handleGeneratePicklist}
-                  disabled={mappedCount === 0 || isGenerating}
-                  className="ml-auto"
-                >
-                  {isGenerating ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  Generate 4×6 Picklist
-                </Button>
+                <div className="ml-auto flex items-center gap-2 flex-wrap">
+                  <Button
+                    onClick={handlePushToLive}
+                    disabled={mappedCount === 0 || isPushing}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {isPushing ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="mr-2 h-4 w-4" />
+                    )}
+                    Push to Live Picklist
+                  </Button>
+                  <Button
+                    onClick={handleGeneratePicklist}
+                    disabled={mappedCount === 0 || isGenerating}
+                    variant="outline"
+                  >
+                    {isGenerating ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    Generate 4×6 PDF
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
