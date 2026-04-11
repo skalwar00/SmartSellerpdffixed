@@ -12,7 +12,7 @@ export default function SignUpSuccessPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
               <BarChart3 className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">Aavoni</span>
+            <span className="text-xl font-bold">SmartSellerPick</span>
           </div>
           <Card>
             <CardHeader className="text-center">
