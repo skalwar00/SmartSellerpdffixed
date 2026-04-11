@@ -48,7 +48,7 @@ export default function OnboardingPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500">
               <BarChart3 className="h-5 w-5 text-white" />
             </div>
-            <span className="text-xl font-bold">SmartSeller Suite</span>
+            <span className="text-xl font-bold">SmartSellerPick</span>
           </div>
 
           <div className="text-center">
