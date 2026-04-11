@@ -3,9 +3,7 @@
 import { useState, useCallback } from 'react'
 import { DashboardHeader } from '@/components/dashboard/sidebar'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
   TableBody,
@@ -26,6 +24,10 @@ import {
   Package,
   BarChart2,
   IndianRupee,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
+  ChevronRight,
 } from 'lucide-react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
@@ -47,6 +49,11 @@ interface Summary {
   totalUnits: number
   categoryBreakdown: Record<string, { units: number; settlement: number; profit: number }>
 }
+
+type SortKey = keyof OrderRow
+type SortDir = 'asc' | 'desc'
+
+const PAGE_SIZE = 50
 
 function getDesignPattern(masterSku: string): string {
   let sku = masterSku.toUpperCase().trim()
@@ -83,9 +90,11 @@ export default function FlipkartAnalyzerPage() {
   const [orders, setOrders] = useState<OrderRow[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [stdCost, setStdCost] = useState(165)
-  const [hfCost, setHfCost] = useState(110)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [uploadOpen, setUploadOpen] = useState(true)
+  const [sortKey, setSortKey] = useState<SortKey | null>(null)
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [page, setPage] = useState(0)
 
   const getCategoryAndCost = useCallback((skuName: string): [string, number] => {
     if (!settings) return ['Unknown', 0]
@@ -93,12 +102,38 @@ export default function FlipkartAnalyzerPage() {
     const masterSku = settings.mappingDict[portalSku] || portalSku
     const pattern = getDesignPattern(masterSku)
     if (pattern in settings.costingDict) return ['DB Match', settings.costingDict[pattern]]
-    const isHF = portalSku.startsWith('HF')
-    const baseCost = isHF ? hfCost : stdCost
-    if (portalSku.includes('3CBO')) return ['Combo 3', baseCost * 3]
-    if (portalSku.includes('CBO')) return ['Combo 2', baseCost * 2]
-    return [isHF ? 'HF Single' : 'Std Single', baseCost]
-  }, [settings, stdCost, hfCost])
+    return ['No Costing', 0]
+  }, [settings])
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+    setPage(0)
+  }
+
+  const sortedOrders = [...orders].sort((a, b) => {
+    if (!sortKey) return 0
+    const av = a[sortKey], bv = b[sortKey]
+    if (typeof av === 'number' && typeof bv === 'number')
+      return sortDir === 'asc' ? av - bv : bv - av
+    return sortDir === 'asc'
+      ? String(av).localeCompare(String(bv))
+      : String(bv).localeCompare(String(av))
+  })
+
+  const totalPages = Math.ceil(sortedOrders.length / PAGE_SIZE)
+  const pageOrders = sortedOrders.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+
+  const SortIcon = ({ col }: { col: SortKey }) => {
+    if (sortKey !== col) return <ChevronsUpDown className="inline h-3 w-3 opacity-30 ml-1" />
+    return sortDir === 'asc'
+      ? <ChevronUp className="inline h-3 w-3 ml-1" />
+      : <ChevronDown className="inline h-3 w-3 ml-1" />
+  }
 
   const runAnalysis = async (file: File) => {
     if (!settings) return
@@ -112,20 +147,17 @@ export default function FlipkartAnalyzerPage() {
       if (!res.ok) throw new Error('Failed to parse file')
 
       const data = await res.json()
-      console.log("COLUMNS:", Object.keys(data.rows[0]))
       const rows: OrderRow[] = []
       const categoryBreakdown: Summary['categoryBreakdown'] = {}
 
       for (const row of data.rows) {
-        console.log("ROW:", row)
-        console.log("COLUMNS:", Object.keys(row))
-        console.log("RAW Net Units:", row['Net Units'])
-        console.log("TYPE:", typeof row['Net Units'])
-
         const skuCol = row['SKU Name'] || row['sku_name'] || ''
-        const settlementCol = parseFloat(row['Bank Settlement [Projected] (INR)'] || row['settlement'] || 0)
-        const unitsCol = parseInt(row['Net Units '] || row['units'] || 0)
         const orderIdCol = row['Order ID'] || row['order_id'] || ''
+
+        if (!skuCol && !orderIdCol) continue
+
+        const settlementCol = parseFloat(row['Bank Settlement [Projected] (INR)'] || row['settlement'] || 0)
+        const unitsCol = parseInt(row['Net Units'] || row['units'] || 0)
         const statusCol = row['Order Status'] || row['status'] || ''
 
         const [category, unitCost] = getCategoryAndCost(skuCol)
@@ -142,6 +174,9 @@ export default function FlipkartAnalyzerPage() {
       }
 
       setOrders(rows)
+      setPage(0)
+      setSortKey(null)
+      setUploadOpen(false)
       setSummary({
         totalSettlement: rows.reduce((sum, r) => sum + r.settlement, 0),
         totalProfit: rows.reduce((sum, r) => sum + r.netProfit, 0),
@@ -228,78 +263,59 @@ export default function FlipkartAnalyzerPage() {
 
       <div className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Cost Settings</CardTitle>
-            <CardDescription>Default costs for products without DB costing</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-4">
-              <div className="w-44">
-                <Label htmlFor="std-cost">Standard Pant (PT/PL)</Label>
-                <Input
-                  id="std-cost"
-                  type="number"
-                  value={stdCost}
-                  onChange={(e) => setStdCost(parseInt(e.target.value) || 0)}
-                  className="mt-1"
-                />
-              </div>
-              <div className="w-44">
-                <Label htmlFor="hf-cost">HF Series</Label>
-                <Input
-                  id="hf-cost"
-                  type="number"
-                  value={hfCost}
-                  onChange={(e) => setHfCost(parseInt(e.target.value) || 0)}
-                  className="mt-1"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <IndianRupee className="h-4 w-4 text-muted-foreground" />
-              Upload Flipkart Orders
-            </CardTitle>
-            <CardDescription>
-              Upload your Flipkart Orders P&L Excel file (.xlsx)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <FileDropzone
-              accept=".xlsx,.xls"
-              files={selectedFiles}
-              onFilesChange={setSelectedFiles}
-              disabled={isProcessing}
-              label="Drop your Flipkart Excel file here or click to browse"
-              hint="Accepts .xlsx and .xls files"
-            />
-            <div className="flex flex-wrap gap-3">
-              <Button
-                onClick={handleAnalyze}
-                disabled={selectedFiles.length === 0 || isProcessing}
-                className="min-w-[140px]"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Analyzing…
-                  </>
-                ) : (
-                  'Generate Analysis'
+          <CardHeader
+            className="cursor-pointer select-none"
+            onClick={() => setUploadOpen(o => !o)}
+          >
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <IndianRupee className="h-4 w-4 text-muted-foreground" />
+                Upload Flipkart Orders
+                {selectedFiles.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">{selectedFiles.length} file</Badge>
                 )}
-              </Button>
-              {orders.length > 0 && (
-                <Button variant="outline" onClick={handleExport}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export CSV
-                </Button>
-              )}
+              </CardTitle>
+              <ChevronRight
+                className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${uploadOpen ? 'rotate-90' : ''}`}
+              />
             </div>
-          </CardContent>
+          </CardHeader>
+
+          {uploadOpen && (
+            <CardContent className="space-y-3 pt-0">
+              <FileDropzone
+                accept=".xlsx,.xls"
+                compact
+                files={selectedFiles}
+                onFilesChange={setSelectedFiles}
+                disabled={isProcessing}
+                label="Drop your Flipkart Excel file here or click to browse"
+                hint="Accepts .xlsx and .xls files"
+              />
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  onClick={handleAnalyze}
+                  disabled={selectedFiles.length === 0 || isProcessing}
+                  className="min-w-[140px]"
+                >
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Analyzing…
+                    </>
+                  ) : (
+                    'Generate Analysis'
+                  )}
+                </Button>
+                {orders.length > 0 && (
+                  <Button variant="outline" onClick={(e) => { e.stopPropagation(); handleExport() }}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Export CSV
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          )}
         </Card>
 
         {summary && (
@@ -372,27 +388,43 @@ export default function FlipkartAnalyzerPage() {
               <CardTitle className="text-base flex items-center gap-2">
                 All Orders
                 <Badge variant="secondary" className="text-xs">
-                  {Math.min(50, orders.length)} of {orders.length}
+                  {orders.length} rows
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="max-h-[480px] overflow-auto rounded-b-xl">
+              <div className="overflow-auto">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background shadow-[0_1px_0_0_hsl(var(--border))] z-10">
                     <TableRow>
-                      <TableHead className="pl-4">Order ID</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead className="text-right">Cost</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Units</TableHead>
-                      <TableHead className="text-right">Settlement</TableHead>
-                      <TableHead className="text-right pr-4">Profit</TableHead>
+                      <TableHead className="pl-4 cursor-pointer select-none whitespace-nowrap" onClick={() => handleSort('orderId')}>
+                        Order ID <SortIcon col="orderId" />
+                      </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('sku')}>
+                        SKU <SortIcon col="sku" />
+                      </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('category')}>
+                        Category <SortIcon col="category" />
+                      </TableHead>
+                      <TableHead className="text-right cursor-pointer select-none whitespace-nowrap" onClick={() => handleSort('unitCost')}>
+                        Cost <SortIcon col="unitCost" />
+                      </TableHead>
+                      <TableHead className="cursor-pointer select-none" onClick={() => handleSort('status')}>
+                        Status <SortIcon col="status" />
+                      </TableHead>
+                      <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('units')}>
+                        Units <SortIcon col="units" />
+                      </TableHead>
+                      <TableHead className="text-right cursor-pointer select-none whitespace-nowrap" onClick={() => handleSort('settlement')}>
+                        Settlement <SortIcon col="settlement" />
+                      </TableHead>
+                      <TableHead className="text-right cursor-pointer select-none pr-4 whitespace-nowrap" onClick={() => handleSort('netProfit')}>
+                        Profit <SortIcon col="netProfit" />
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {orders.slice(0, 50).map((order, idx) => (
+                    {pageOrders.map((order, idx) => (
                       <TableRow
                         key={idx}
                         className={`transition-colors hover:bg-muted/50 ${idx % 2 !== 0 ? 'bg-muted/20' : ''}`}
@@ -431,6 +463,35 @@ export default function FlipkartAnalyzerPage() {
                   </TableBody>
                 </Table>
               </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between border-t px-4 py-3">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, orders.length)} of {orders.length} orders
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(p => Math.max(0, p - 1))}
+                      disabled={page === 0}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {page + 1} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                      disabled={page === totalPages - 1}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

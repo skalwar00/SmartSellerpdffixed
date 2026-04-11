@@ -574,7 +574,80 @@ export default function CostingPage() {
           </CardContent>
         </Card>
 
+      {/* Change PIN Section */}
+      <ChangePinSection />
+
       </div>
     </>
+  )
+}
+
+function ChangePinSection() {
+  const [pin, setPin] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      toast.error('PIN must be exactly 4 digits')
+      return
+    }
+    if (pin !== confirm) {
+      toast.error('PINs do not match')
+      return
+    }
+    setSaving(true)
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({ data: { costing_pin: pin } })
+    if (error) {
+      toast.error('Failed to update PIN')
+    } else {
+      toast.success('PIN updated successfully')
+      setPin('')
+      setConfirm('')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Change Costing PIN</CardTitle>
+        <CardDescription>Update the 4-digit PIN used to access Costing Manager</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="w-44">
+            <Label htmlFor="new-pin">New PIN</Label>
+            <Input
+              id="new-pin"
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="••••"
+              value={pin}
+              onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              className="mt-1 tracking-widest text-center text-lg"
+            />
+          </div>
+          <div className="w-44">
+            <Label htmlFor="confirm-pin">Confirm PIN</Label>
+            <Input
+              id="confirm-pin"
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="••••"
+              value={confirm}
+              onChange={e => setConfirm(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              className="mt-1 tracking-widest text-center text-lg"
+            />
+          </div>
+          <Button onClick={handleSave} disabled={saving || pin.length < 4 || confirm.length < 4}>
+            {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</> : 'Update PIN'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

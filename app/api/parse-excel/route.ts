@@ -20,7 +20,15 @@ export async function POST(req: NextRequest) {
     }
 
     const sheet = workbook.Sheets[sheetName]
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
+    const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[]
+
+    const rows = rawRows.map(row => {
+      const trimmed: Record<string, unknown> = {}
+      for (const key of Object.keys(row)) {
+        trimmed[key.trim()] = row[key]
+      }
+      return trimmed
+    })
 
     return NextResponse.json({ rows, sheetName })
   } catch (error) {

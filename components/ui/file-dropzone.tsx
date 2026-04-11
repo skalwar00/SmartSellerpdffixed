@@ -13,6 +13,7 @@ interface FileDropzoneProps {
   label?: string
   hint?: string
   className?: string
+  compact?: boolean
 }
 
 export function FileDropzone({
@@ -24,6 +25,7 @@ export function FileDropzone({
   label = 'Drop files here or click to browse',
   hint,
   className,
+  compact = false,
 }: FileDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -56,7 +58,7 @@ export function FileDropzone({
   }
 
   return (
-    <div className={cn('space-y-3', className)}>
+    <div className={cn('space-y-2', className)}>
       <div
         role="button"
         tabIndex={disabled ? -1 : 0}
@@ -69,7 +71,8 @@ export function FileDropzone({
         onClick={() => !disabled && inputRef.current?.click()}
         onKeyDown={(e) => e.key === 'Enter' && !disabled && inputRef.current?.click()}
         className={cn(
-          'relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-all duration-200 cursor-pointer select-none',
+          'relative flex items-center justify-center gap-3 rounded-xl border-2 border-dashed text-center transition-all duration-200 cursor-pointer select-none',
+          compact ? 'px-4 py-3 flex-row' : 'flex-col px-6 py-8',
           isDragging && !disabled
             ? 'border-primary bg-primary/5 scale-[1.01]'
             : 'border-muted-foreground/25 hover:border-primary/60 hover:bg-muted/30',
@@ -85,29 +88,29 @@ export function FileDropzone({
           disabled={disabled}
           className="hidden"
         />
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-          <UploadCloud className="h-6 w-6 text-primary" />
+        <div className={cn('flex items-center justify-center rounded-full bg-primary/10 shrink-0', compact ? 'h-8 w-8' : 'h-12 w-12')}>
+          <UploadCloud className={cn('text-primary', compact ? 'h-4 w-4' : 'h-6 w-6')} />
         </div>
-        <div>
-          <p className="text-sm font-medium text-foreground">{label}</p>
+        <div className={compact ? 'text-left' : ''}>
+          <p className={cn('font-medium text-foreground', compact ? 'text-xs' : 'text-sm')}>{label}</p>
           {hint && (
-            <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
           )}
         </div>
       </div>
 
       {files.length > 0 && (
-        <ul className="space-y-2">
+        <ul className="space-y-1.5">
           {files.map((file, idx) => (
             <li
               key={idx}
-              className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2"
+              className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-1.5"
             >
-              <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className="flex-1 truncate text-sm font-medium">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="flex-1 truncate text-xs font-medium">
                 {file.name}
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground shrink-0">
                 {(file.size / 1024).toFixed(0)} KB
               </span>
               <button
