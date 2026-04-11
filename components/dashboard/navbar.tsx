@@ -23,8 +23,10 @@ import {
   LogOut,
   ChevronDown,
   AlertTriangle,
+  Lock,
 } from 'lucide-react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
+import { PinDialog } from '@/components/dashboard/pin-dialog'
 
 interface PlanData {
   id: string
@@ -41,7 +43,6 @@ interface NavbarProps {
 
 const navItems = [
   { title: 'Picklist', url: '/dashboard', icon: Package },
-  { title: 'Costing Manager', url: '/dashboard/costing', icon: DollarSign },
   { title: 'Flipkart Profit', url: '/dashboard/flipkart', icon: ShoppingBag },
   { title: 'Myntra Profit', url: '/dashboard/myntra', icon: Shirt },
   { title: 'Subscription', url: '/dashboard/subscription', icon: CreditCard },
@@ -52,6 +53,7 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
   const [daysLeft, setDaysLeft] = useState(0)
+  const [pinOpen, setPinOpen] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -72,21 +74,115 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
   const userInitials = user.email?.slice(0, 2).toUpperCase() || 'U'
 
   return (
-    <nav className="sticky top-0 z-50 w-full border-b border-[#E5E7EB] bg-white">
-      <div className="mx-auto flex h-16 max-w-screen-xl items-center justify-between px-4 sm:px-6">
+    <>
+      <nav className="sticky top-0 z-50 w-full border-b border-[#E5E7EB] bg-white">
+        <div className="mx-auto flex h-16 max-w-screen-xl items-center justify-between px-4 sm:px-6">
 
-        {/* Left: Logo */}
-        <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500 shadow-sm">
-            <BarChart3 className="h-4 w-4 text-white" />
+          {/* Left: Logo */}
+          <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
+            <img src="/logo.png" alt="SSP Logo" className="h-9 w-9 object-contain" />
+            <span className="hidden text-sm font-bold text-gray-900 sm:block">
+              SmartSellerPick
+            </span>
+          </Link>
+
+          {/* Center: Nav links (desktop) */}
+          <div className="hidden items-center gap-0.5 md:flex">
+            {navItems.map((item) => {
+              const isActive =
+                item.url === '/dashboard'
+                  ? pathname === '/dashboard'
+                  : pathname.startsWith(item.url)
+              return (
+                <Link
+                  key={item.url}
+                  href={item.url}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
+                    isActive
+                      ? 'bg-[#E0E7FF] text-[#3B82F6]'
+                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.title}
+                  {item.title === 'Subscription' && isExpiringSoon && (
+                    <AlertTriangle className="h-3 w-3 text-amber-500" />
+                  )}
+                </Link>
+              )
+            })}
           </div>
-          <span className="hidden text-sm font-bold text-gray-900 sm:block">
-            SmartSellerPick
-          </span>
-        </Link>
 
-        {/* Center: Nav links (desktop) */}
-        <div className="hidden items-center gap-0.5 md:flex">
+          {/* Right: Plan badge + User menu */}
+          <div className="flex items-center gap-2">
+            {mounted && (
+              isPro ? (
+                <Badge className="hidden bg-blue-500 text-white hover:bg-blue-500 sm:flex">
+                  Pro
+                </Badge>
+              ) : (
+                <Badge
+                  variant={daysLeft <= 2 ? 'destructive' : 'secondary'}
+                  className="hidden sm:flex"
+                >
+                  {daysLeft}d left
+                </Badge>
+              )
+            )}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-gray-700 outline-none transition-all duration-200 hover:bg-gray-100">
+                  <Avatar className="h-7 w-7">
+                    <AvatarFallback className="bg-blue-500 text-white text-xs font-semibold">
+                      {userInitials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="hidden max-w-[160px] truncate text-xs font-medium sm:block">
+                    {user.email}
+                  </span>
+                  <ChevronDown className="hidden h-3.5 w-3.5 text-gray-400 sm:block" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <div className="border-b px-3 py-2.5">
+                  <p className="truncate text-xs font-semibold text-gray-900">{user.email}</p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    {isPro
+                      ? 'Pro Plan · Active'
+                      : `Trial · ${mounted ? daysLeft : '…'}d left`}
+                  </p>
+                </div>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault()
+                    setPinOpen(true)
+                  }}
+                >
+                  <Lock className="mr-2 h-4 w-4 text-blue-500" />
+                  <span>Costing Manager</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/subscription">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Subscription
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="text-red-600 focus:bg-red-50 focus:text-red-600"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* Mobile nav — horizontal scroll */}
+        <div className="flex overflow-x-auto border-t border-[#E5E7EB] px-3 py-1.5 gap-0.5 md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {navItems.map((item) => {
             const isActive =
               item.url === '/dashboard'
@@ -96,104 +192,29 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
               <Link
                 key={item.url}
                 href={item.url}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
                   isActive
                     ? 'bg-[#E0E7FF] text-[#3B82F6]'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                <item.icon className="h-4 w-4" />
+                <item.icon className="h-3.5 w-3.5" />
                 {item.title}
-                {item.title === 'Subscription' && isExpiringSoon && (
-                  <AlertTriangle className="h-3 w-3 text-amber-500" />
-                )}
               </Link>
             )
           })}
+          {/* Costing in mobile nav */}
+          <button
+            onClick={() => setPinOpen(true)}
+            className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-all duration-200"
+          >
+            <Lock className="h-3.5 w-3.5" />
+            Costing
+          </button>
         </div>
+      </nav>
 
-        {/* Right: Plan badge + User menu */}
-        <div className="flex items-center gap-2">
-          {mounted && (
-            isPro ? (
-              <Badge className="hidden bg-blue-500 text-white hover:bg-blue-500 sm:flex">
-                Pro
-              </Badge>
-            ) : (
-              <Badge
-                variant={daysLeft <= 2 ? 'destructive' : 'secondary'}
-                className="hidden sm:flex"
-              >
-                {daysLeft}d left
-              </Badge>
-            )
-          )}
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-gray-700 outline-none transition-all duration-200 hover:bg-gray-100">
-                <Avatar className="h-7 w-7">
-                  <AvatarFallback className="bg-blue-500 text-white text-xs font-semibold">
-                    {userInitials}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="hidden max-w-[160px] truncate text-xs font-medium sm:block">
-                  {user.email}
-                </span>
-                <ChevronDown className="hidden h-3.5 w-3.5 text-gray-400 sm:block" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <div className="border-b px-3 py-2.5">
-                <p className="truncate text-xs font-semibold text-gray-900">{user.email}</p>
-                <p className="mt-0.5 text-xs text-gray-500">
-                  {isPro
-                    ? 'Pro Plan · Active'
-                    : `Trial · ${mounted ? daysLeft : '…'}d left`}
-                </p>
-              </div>
-              <DropdownMenuItem asChild>
-                <Link href="/dashboard/subscription">
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  Subscription
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={handleLogout}
-                className="text-red-600 focus:bg-red-50 focus:text-red-600"
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      {/* Mobile nav — horizontal scroll */}
-      <div className="flex overflow-x-auto border-t border-[#E5E7EB] px-3 py-1.5 gap-0.5 md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {navItems.map((item) => {
-          const isActive =
-            item.url === '/dashboard'
-              ? pathname === '/dashboard'
-              : pathname.startsWith(item.url)
-          return (
-            <Link
-              key={item.url}
-              href={item.url}
-              className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
-                isActive
-                  ? 'bg-[#E0E7FF] text-[#3B82F6]'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              <item.icon className="h-3.5 w-3.5" />
-              {item.title}
-            </Link>
-          )
-        })}
-      </div>
-    </nav>
+      <PinDialog open={pinOpen} onClose={() => setPinOpen(false)} />
+    </>
   )
 }
