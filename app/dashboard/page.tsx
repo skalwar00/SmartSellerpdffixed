@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, Fragment, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DashboardHeader } from '@/components/dashboard/sidebar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
@@ -15,19 +14,92 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { FileDropzone } from '@/components/ui/file-dropzone'
 import { toast } from 'sonner'
-import { Download, Save, RefreshCw, Loader2, Package, CheckCircle2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Download, Save, RefreshCw, Loader2, Package, CheckCircle2, AlertCircle, ChevronDown, ChevronUp, Plus, X } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
-import Fuse from 'fuse.js'
+
+function SearchableSelect({
+  value,
+  options,
+  placeholder = 'Select...',
+  onChange,
+  className,
+  tabIndex,
+}: {
+  value: string
+  options: string[]
+  placeholder?: string
+  onChange: (v: string) => void
+  className?: string
+  tabIndex?: number
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const filtered = options.filter(o => o.toLowerCase().includes(query.toLowerCase()))
+
+  useEffect(() => {
+    if (open) { setTimeout(() => inputRef.current?.focus(), 0) }
+    else { setQuery('') }
+  }, [open])
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [])
+
+  return (
+    <div ref={containerRef} className={`relative ${className ?? ''}`}>
+      <button
+        type="button"
+        tabIndex={tabIndex}
+        onClick={() => setOpen(o => !o)}
+        className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      >
+        <span className={value ? 'truncate' : 'text-muted-foreground truncate'}>{value || placeholder}</span>
+        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full min-w-[200px] rounded-md border bg-popover shadow-md">
+          <div className="p-2 border-b">
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search SKU..."
+              className="w-full rounded-sm border border-input bg-background px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-center text-sm text-muted-foreground">No results found</div>
+            ) : (
+              filtered.map(opt => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => { onChange(opt); setOpen(false) }}
+                  className={`flex w-full items-center px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground ${opt === value ? 'bg-accent/60 font-medium' : ''}`}
+                >
+                  {opt}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface OrderData {
   Portal_SKU: string
@@ -40,6 +112,8 @@ interface MappingRow {
   portalSku: string
   masterSku: string
   matchScore: number
+  comboExpanded?: boolean
+  comboSkus?: string[]
 }
 
 // Token Set Ratio - matches thefuzz behavior
@@ -99,7 +173,10 @@ async function fetchUserData() {
     mappingDict[item.portal_sku.toUpperCase()] = item.master_sku
   })
   const masterOptions = inventoryRes.data?.map(i => i.master_sku.toUpperCase()) || []
-  return { mappingDict, masterOptions, userId: user.id }
+  // Read preferences from user metadata (no DB migration needed)
+  const isComboEnabled = (user.user_metadata?.is_combo_enabled as boolean) ?? false
+  const comboMappings = (user.user_metadata?.combo_mappings as Record<string, string[]>) || {}
+  return { mappingDict, masterOptions, userId: user.id, isComboEnabled, comboMappings }
 }
 
 function parseCSVLine(line: string): string[] {
@@ -168,7 +245,6 @@ export default function PicklistPage() {
           const skuIndex = findSkuColumn(headers)
           const qtyIndex = findQtyColumn(headers)
           if (skuIndex === -1) { toast.error(`SKU column not found in ${file.name}`); continue }
-          console.log(`[v0] Using SKU Column: ${headers[skuIndex]} (index: ${skuIndex})`)
           for (let i = 1; i < lines.length; i++) {
             const cols = parseCSVLine(lines[i])
             if (cols[skuIndex]) {
@@ -194,13 +270,22 @@ export default function PicklistPage() {
         }
       }
 
-      const mappedOrders = allOrders.map(order => ({
-        ...order,
-        Master_SKU: data.mappingDict[order.Portal_SKU],
-      }))
+      // Expand combo orders into one row per master SKU
+      const mappedOrders = allOrders.flatMap(order => {
+        const comboSkus = data.comboMappings[order.Portal_SKU]
+        if (comboSkus && comboSkus.length > 0) {
+          return comboSkus.map(masterSku => ({ ...order, Master_SKU: masterSku }))
+        }
+        return [{ ...order, Master_SKU: data.mappingDict[order.Portal_SKU] }]
+      })
       setOrders(mappedOrders)
 
-      const unmapped = [...new Set(mappedOrders.filter(o => !o.Master_SKU).map(o => o.Portal_SKU))]
+      // Only show unmapped for portal SKUs that have no mapping at all (neither simple nor combo)
+      const unmapped = [...new Set(
+        allOrders
+          .filter(o => !data.mappingDict[o.Portal_SKU] && !data.comboMappings[o.Portal_SKU])
+          .map(o => o.Portal_SKU)
+      )]
       if (unmapped.length > 0 && data.masterOptions.length > 0) {
         const newMappingRows: MappingRow[] = unmapped.map(sku => {
           let bestMatch = data.masterOptions[0] || ''
@@ -209,7 +294,14 @@ export default function PicklistPage() {
             const score = tokenSetRatio(sku, masterSku)
             if (score > bestScore) { bestScore = score; bestMatch = masterSku }
           }
-          return { confirm: bestScore >= 90, portalSku: sku, masterSku: bestMatch, matchScore: bestScore }
+          return {
+            confirm: bestScore >= 90,
+            portalSku: sku,
+            masterSku: bestMatch,
+            matchScore: bestScore,
+            comboExpanded: false,
+            comboSkus: [],
+          }
         })
         setUnmappedRows(newMappingRows)
       } else {
@@ -235,7 +327,6 @@ export default function PicklistPage() {
   const handleMasterSync = async () => {
     if (!masterFiles[0] || !data) return
 
-    // Parse file client-side immediately
     const text = await masterFiles[0].text()
     const lines = text.split('\n').filter(l => l.trim())
     const skus = [...new Set(
@@ -243,15 +334,11 @@ export default function PicklistPage() {
     )]
     if (skus.length === 0) { toast.error('No SKUs found in file'); return }
 
-    // Snapshot for rollback
     const snapshot = data
-
-    // ── Optimistic update — instant UI ──
     mutate('user-data', { ...data, masterOptions: skus }, false)
     setMasterFiles([])
     toast.success(`Synced ${skus.length} master SKUs`)
 
-    // ── Background Supabase sync ──
     setIsSyncingMaster(true)
     try {
       const supabase = createClient()
@@ -260,7 +347,6 @@ export default function PicklistPage() {
       if (error) throw error
       mutate('user-data')
     } catch (err) {
-      // ── Rollback on failure ──
       mutate('user-data', snapshot, false)
       toast.error('Sync failed — changes reverted')
       console.error(err)
@@ -274,28 +360,61 @@ export default function PicklistPage() {
     const toSave = unmappedRows.filter(row => row.confirm && row.masterSku)
     if (toSave.length === 0) { toast.error('No mappings selected'); return }
 
-    // Snapshot for rollback
     const prevOrders = orders
     const prevUnmapped = unmappedRows
 
-    // ── Optimistic update — instant UI ──
-    setOrders(prev => prev.map(order => {
-      const mapping = toSave.find(m => m.portalSku === order.Portal_SKU)
-      return mapping ? { ...order, Master_SKU: mapping.masterSku } : order
-    }))
+    // Optimistic update: expand combo rows into multiple order rows
+    setOrders(prev => {
+      const result: OrderData[] = []
+      for (const order of prev) {
+        const mapping = toSave.find(m => m.portalSku === order.Portal_SKU)
+        if (mapping) {
+          const allSkus = [mapping.masterSku, ...(mapping.comboSkus || []).filter(Boolean)]
+          if (allSkus.length > 1) {
+            allSkus.forEach(sku => result.push({ ...order, Master_SKU: sku }))
+          } else {
+            result.push({ ...order, Master_SKU: mapping.masterSku })
+          }
+        } else {
+          result.push(order)
+        }
+      }
+      return result
+    })
     setUnmappedRows(prev => prev.filter(row => !row.confirm))
     toast.success(`Saved ${toSave.length} mapping${toSave.length !== 1 ? 's' : ''}`)
 
-    // ── Background Supabase sync ──
     setIsSavingMappings(true)
     try {
       const supabase = createClient()
-      const records = toSave.map(row => ({ user_id: data.userId, portal_sku: row.portalSku, master_sku: row.masterSku }))
+
+      // Save combo mappings to user metadata (no DB column needed)
+      const comboRows = toSave.filter(row => (row.comboSkus || []).filter(Boolean).length > 0)
+      if (comboRows.length > 0) {
+        const { data: { user } } = await supabase.auth.getUser()
+        const existingCombo = (user?.user_metadata?.combo_mappings as Record<string, string[]>) || {}
+        const updatedCombo = {
+          ...existingCombo,
+          ...Object.fromEntries(
+            comboRows.map(row => [
+              row.portalSku,
+              [row.masterSku, ...(row.comboSkus || []).filter(Boolean)],
+            ])
+          ),
+        }
+        await supabase.auth.updateUser({ data: { combo_mappings: updatedCombo } })
+      }
+
+      // Save primary SKU to DB (no components column — works without migration)
+      const records = toSave.map(row => ({
+        user_id: data.userId,
+        portal_sku: row.portalSku,
+        master_sku: row.masterSku,
+      }))
       const { error } = await supabase.from('sku_mapping').upsert(records, { onConflict: 'user_id, portal_sku' })
       if (error) throw error
       mutate('user-data')
     } catch (err) {
-      // ── Rollback on failure ──
       setOrders(prevOrders)
       setUnmappedRows(prevUnmapped)
       toast.error('Save failed — changes reverted')
@@ -332,6 +451,60 @@ export default function PicklistPage() {
     }
   }
 
+  const updateRow = (idx: number, changes: Partial<MappingRow>) => {
+    setUnmappedRows(prev => prev.map((r, i) => i === idx ? { ...r, ...changes } : r))
+  }
+
+  const addComboSku = (idx: number) => {
+    setUnmappedRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r
+
+      const usedSkus = new Set([r.masterSku, ...(r.comboSkus || [])])
+      const available = (data?.masterOptions || []).filter(o => o && !usedSkus.has(o))
+      if (available.length === 0) return { ...r, comboSkus: [...(r.comboSkus || []), ''] }
+
+      // Build a smarter query for the next combo slot:
+      // - Find tokens in the portal SKU that are NOT in any already-selected master SKU
+      //   (these are the "remaining" discriminating tokens, e.g. NAVY after OLIVE was picked)
+      // - Also keep size-like tokens (8XL, L, XL…) so the size stays correct
+      const portalTokens = r.portalSku.toUpperCase().split(/[-_()+\s]+/).filter(Boolean)
+      const claimedTokens = new Set<string>()
+      ;[r.masterSku, ...(r.comboSkus || [])].filter(Boolean).forEach(sku => {
+        sku.toUpperCase().split(/[-_\s]+/).filter(Boolean).forEach(t => claimedTokens.add(t))
+      })
+
+      const isSize = (t: string) => /^\d+[A-Z]*$|^[SML]{1,2}$/.test(t)
+      const uniqueTokens = portalTokens.filter(t => !claimedTokens.has(t))
+      const sizeTokens   = portalTokens.filter(t => claimedTokens.has(t) && isSize(t))
+      const query = [...uniqueTokens, ...sizeTokens].join(' ') || r.portalSku
+
+      let bestMatch = available[0]
+      let bestScore = 0
+      for (const masterSku of available) {
+        const score = tokenSetRatio(query, masterSku)
+        if (score > bestScore) { bestScore = score; bestMatch = masterSku }
+      }
+      return { ...r, comboSkus: [...(r.comboSkus || []), bestMatch] }
+    }))
+  }
+
+  const updateComboSku = (rowIdx: number, skuIdx: number, value: string) => {
+    setUnmappedRows(prev => prev.map((r, i) => {
+      if (i !== rowIdx) return r
+      const updated = [...(r.comboSkus || [])]
+      updated[skuIdx] = value
+      return { ...r, comboSkus: updated }
+    }))
+  }
+
+  const removeComboSku = (rowIdx: number, skuIdx: number) => {
+    setUnmappedRows(prev => prev.map((r, i) => {
+      if (i !== rowIdx) return r
+      const updated = (r.comboSkus || []).filter((_, si) => si !== skuIdx)
+      return { ...r, comboSkus: updated }
+    }))
+  }
+
   if (error) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8">
@@ -343,6 +516,7 @@ export default function PicklistPage() {
 
   const mappedCount = orders.filter(o => o.Master_SKU).length
   const unmappedCount = orders.filter(o => !o.Master_SKU).length
+  const isComboEnabled = data?.isComboEnabled ?? false
 
   return (
     <>
@@ -520,73 +694,123 @@ export default function PicklistPage() {
               <CardTitle className="text-base flex items-center gap-2">
                 New SKU Mapping
                 <Badge variant="outline">{unmappedRows.length} SKUs</Badge>
+                {isComboEnabled && (
+                  <Badge variant="secondary" className="text-xs">Combo Mode</Badge>
+                )}
               </CardTitle>
               <CardDescription>
-                Review and confirm suggested mappings, then save to apply them.
+                {isComboEnabled
+                  ? 'Click + to add multiple Master SKUs per portal SKU for combo/bundle products.'
+                  : 'Review and confirm suggested mappings, then save to apply them.'}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="max-h-[400px] overflow-auto">
+              <div className="max-h-[500px] overflow-auto">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background shadow-[0_1px_0_0_hsl(var(--border))] z-10">
                     <TableRow>
-                      <TableHead className="w-12 pl-4">✓</TableHead>
-                      <TableHead>Portal SKU</TableHead>
+                      <TableHead className="w-10 pl-4">✓</TableHead>
+                      <TableHead className="w-[200px]">Portal SKU</TableHead>
                       <TableHead>Master SKU</TableHead>
-                      <TableHead className="text-right pr-4">Match</TableHead>
+                      {isComboEnabled && <TableHead className="w-10" />}
+                      <TableHead className="text-right pr-4 w-20">Match</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {unmappedRows.map((row, idx) => (
-                      <TableRow
-                        key={idx}
-                        className={`transition-colors hover:bg-muted/50 ${idx % 2 !== 0 ? 'bg-muted/20' : ''}`}
-                      >
-                        <TableCell className="pl-4">
-                          <Checkbox
-                            checked={row.confirm}
-                            onCheckedChange={(checked) => {
-                              setUnmappedRows(prev =>
-                                prev.map((r, i) => i === idx ? { ...r, confirm: !!checked } : r)
-                              )
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">{row.portalSku}</TableCell>
-                        <TableCell>
-                          <Select
-                            value={row.masterSku}
-                            onValueChange={(value) => {
-                              setUnmappedRows(prev =>
-                                prev.map((r, i) => i === idx ? { ...r, masterSku: value } : r)
-                              )
-                            }}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select master SKU" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {data.masterOptions.filter(o => o !== '').map(opt => (
-                                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell className="text-right pr-4">
-                          <Badge
-                            variant={
-                              row.matchScore >= 90
-                                ? 'default'
-                                : row.matchScore >= 70
-                                ? 'secondary'
-                                : 'outline'
-                            }
-                            className="text-xs"
-                          >
-                            {row.matchScore}%
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
+                      <Fragment key={idx}>
+                        <TableRow
+                          className={`transition-colors hover:bg-muted/50 ${idx % 2 !== 0 ? 'bg-muted/20' : ''}`}
+                        >
+                          <TableCell className="pl-4">
+                            <Checkbox
+                              checked={row.confirm}
+                              tabIndex={0}
+                              onCheckedChange={(checked) => updateRow(idx, { confirm: !!checked })}
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">{row.portalSku}</TableCell>
+                          <TableCell>
+                            <SearchableSelect
+                              value={row.masterSku}
+                              options={data.masterOptions.filter(o => o !== '')}
+                              placeholder="Select master SKU"
+                              onChange={(value) => updateRow(idx, { masterSku: value })}
+                              className="w-full"
+                              tabIndex={0}
+                            />
+                          </TableCell>
+                          {isComboEnabled && (
+                            <TableCell>
+                              <button
+                                tabIndex={0}
+                                onClick={() => updateRow(idx, { comboExpanded: !row.comboExpanded })}
+                                className="flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-muted-foreground/40 text-muted-foreground transition-colors hover:border-blue-500 hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                                title="Add combo SKUs"
+                              >
+                                {row.comboExpanded ? (
+                                  <ChevronUp className="h-3.5 w-3.5" />
+                                ) : (
+                                  <Plus className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            </TableCell>
+                          )}
+                          <TableCell className="text-right pr-4">
+                            <Badge
+                              variant={
+                                row.matchScore >= 90 ? 'default'
+                                  : row.matchScore >= 70 ? 'secondary'
+                                  : 'outline'
+                              }
+                              className="text-xs"
+                            >
+                              {row.matchScore}%
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+
+                        {isComboEnabled && row.comboExpanded && (
+                          <TableRow className={idx % 2 !== 0 ? 'bg-muted/20' : ''}>
+                            <TableCell />
+                            <TableCell colSpan={3} className="py-2 pr-4">
+                              <div className="flex flex-col gap-2 border-l-2 border-blue-200 pl-3">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  Additional Master SKUs (combo components)
+                                </p>
+                                {(row.comboSkus || []).map((sku, si) => (
+                                  <div key={si} className="flex items-center gap-2">
+                                    <SearchableSelect
+                                      value={sku}
+                                      options={data.masterOptions.filter(o => o !== '')}
+                                      placeholder="Select SKU"
+                                      onChange={(value) => updateComboSku(idx, si, value)}
+                                      className="flex-1"
+                                      tabIndex={0}
+                                    />
+                                    <button
+                                      tabIndex={0}
+                                      onClick={() => removeComboSku(idx, si)}
+                                      className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus:outline-none focus:ring-2 focus:ring-destructive focus:ring-offset-1"
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  tabIndex={0}
+                                  onClick={() => addComboSku(idx)}
+                                  className="flex items-center gap-1.5 self-start rounded-md border border-dashed border-blue-300 px-2.5 py-1 text-xs text-blue-600 transition-colors hover:border-blue-500 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                  Add SKU
+                                </button>
+                              </div>
+                            </TableCell>
+                            {isComboEnabled && <TableCell />}
+                          </TableRow>
+                        )}
+                      </Fragment>
                     ))}
                   </TableBody>
                 </Table>

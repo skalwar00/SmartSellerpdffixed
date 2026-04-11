@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
       if (user) {
         const { data: existing } = await supabase
           .from('users_plan')
-          .select('user_id')
+          .select('user_id, has_seen_onboarding')
           .eq('user_id', user.id)
           .maybeSingle()
 
@@ -25,7 +25,12 @@ export async function GET(request: NextRequest) {
             user_id: user.id,
             plan_type: 'trial',
             expiry_date: expiryDate.toISOString(),
+            has_seen_onboarding: false,
+            is_combo_enabled: false,
           })
+          return NextResponse.redirect(`${origin}/onboarding`)
+        } else if (!existing?.has_seen_onboarding) {
+          return NextResponse.redirect(`${origin}/onboarding`)
         }
       }
       return NextResponse.redirect(`${origin}${next}`)

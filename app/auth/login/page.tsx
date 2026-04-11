@@ -30,12 +30,23 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
       if (error) throw error
-      router.push('/dashboard')
+
+      if (data.user) {
+        // Check user metadata first (no DB migration needed)
+        const hasSeenOnboarding = data.user.user_metadata?.has_seen_onboarding as boolean | undefined
+        if (!hasSeenOnboarding) {
+          router.push('/onboarding')
+        } else {
+          router.push('/dashboard')
+        }
+      } else {
+        router.push('/dashboard')
+      }
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {
