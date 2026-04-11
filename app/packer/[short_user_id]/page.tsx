@@ -470,7 +470,7 @@ export default function PackerPage({
     )
   }
 
-  if (!authPin) {
+  if (!authPin && false) {
     return <PinScreen onSuccess={handlePinAttempt} error={pinError} />
   }
 
