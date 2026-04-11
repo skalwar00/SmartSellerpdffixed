@@ -81,7 +81,7 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
             <BarChart3 className="h-4 w-4 text-white" />
           </div>
           <span className="hidden text-sm font-bold text-gray-900 sm:block">
-            SmartSeller Suite
+            SmartSellerPick
           </span>
         </Link>
 
