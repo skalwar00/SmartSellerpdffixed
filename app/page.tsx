@@ -19,7 +19,7 @@ export default function LandingPage() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center gap-2">
             <img src="/logo.png" alt="SSP Logo" className="h-10 w-10 object-contain" />
-            <span className="text-lg font-bold">SmartSeller Suite</span>
+            <span className="text-lg font-bold">SmartSellerPick</span>
           </div>
           <nav className="hidden items-center gap-6 md:flex">
             <Link href="#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
