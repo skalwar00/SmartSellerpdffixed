@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 function generateShortId(email: string): string {
   const prefix = email.split('@')[0].replace(/[^a-z0-9]/gi, '').toLowerCase().slice(0, 7)
@@ -19,9 +18,7 @@ export async function POST() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const admin = createAdminClient()
-
-  const { data: existing } = await admin
+  const { data: existing } = await supabase
     .from('users_plan')
     .select('short_user_id, security_pin')
     .eq('user_id', user.id)
@@ -37,7 +34,7 @@ export async function POST() {
   const short_user_id = generateShortId(user.email || user.id)
   const security_pin = generatePin()
 
-  const { error } = await admin
+  const { error } = await supabase
     .from('users_plan')
     .update({ short_user_id, security_pin })
     .eq('user_id', user.id)

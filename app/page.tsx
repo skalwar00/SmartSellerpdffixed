@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { LandingHeader } from '@/components/landing-header'
 import { 
   BarChart3, 
   Package, 

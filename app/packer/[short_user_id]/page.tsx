@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, use, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 interface PicklistItem {
@@ -189,11 +190,15 @@ function PickerCard({
   shortUserId,
   onUpdate,
   onOpenQtyModal,
+  isSelected,
+  onToggleSelect,
 }: {
   item: PicklistItem
   shortUserId: string
   onUpdate: (sku: string, newPicked: number, newStatus: string) => void
   onOpenQtyModal: (item: PicklistItem) => void
+  isSelected: boolean
+  onToggleSelect: (sku: string) => void
 }) {
   const [syncing, setSyncing] = useState(false)
   const isDone = item.status === 'picked'
@@ -235,7 +240,9 @@ function PickerCard({
     ? Math.round((item.picked_qty / item.total_qty) * 100)
     : 0
 
-  const cardBg = isDone
+  const cardBg = isSelected
+    ? 'bg-green-50 border-green-200'
+    : isDone
     ? 'bg-green-50 border-green-300'
     : isUpdated
     ? 'bg-orange-50 border-orange-300'
@@ -253,7 +260,22 @@ function PickerCard({
       )}
 
       <div className="flex items-start justify-between mb-2">
-        <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-2.5 flex-1 min-w-0">
+          {/* Multi-select checkbox */}
+          <button
+            onClick={() => { haptic(25); onToggleSelect(item.master_sku) }}
+            className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all active:scale-90 ${
+              isSelected
+                ? 'bg-green-500 border-green-500'
+                : 'bg-white border-gray-300'
+            }`}
+          >
+            {isSelected && (
+              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </button>
           <p className="font-bold text-gray-900 text-base leading-tight break-all">{item.master_sku}</p>
         </div>
         {isDone && <span className="ml-2 text-2xl">✅</span>}
@@ -328,6 +350,7 @@ export default function PackerPage({
   params: Promise<{ short_user_id: string }>
 }) {
   const { short_user_id } = use(params)
+  const router = useRouter()
 
   const [authPin, setAuthPin] = useState<string | null>(null)
   const [correctPin, setCorrectPin] = useState<string | null>(null)
@@ -340,6 +363,64 @@ export default function PackerPage({
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
   const [qtyModalItem, setQtyModalItem] = useState<PicklistItem | null>(null)
+  const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set())
+  const [confirmingSku, setConfirmingSku] = useState(false)
+
+  const toggleSelectSku = (sku: string) => {
+    setSelectedSkus(prev => {
+      const next = new Set(prev)
+      if (next.has(sku)) next.delete(sku)
+      else next.add(sku)
+      return next
+    })
+  }
+
+  const selectAllPending = (pendingList: PicklistItem[]) => {
+    const pendingSkus = pendingList.map(i => i.master_sku)
+    setSelectedSkus(prev => {
+      const next = new Set(prev)
+      pendingSkus.forEach(s => next.add(s))
+      return next
+    })
+    haptic(30)
+  }
+
+  const clearAllSelected = () => {
+    setSelectedSkus(new Set())
+    haptic(20)
+  }
+
+  const confirmSelected = async () => {
+    if (selectedSkus.size === 0 || confirmingSku) return
+    haptic([30, 20, 60])
+    setConfirmingSku(true)
+    const skusToConfirm = Array.from(selectedSkus)
+    try {
+      await Promise.all(
+        skusToConfirm.map(async (sku) => {
+          const item = items.find(i => i.master_sku === sku)
+          if (!item) return
+          const res = await fetch('/api/picklist/pick', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              short_user_id,
+              master_sku: sku,
+              picked_qty: item.total_qty,
+            }),
+          })
+          const json = await res.json()
+          if (json.success) {
+            handleItemUpdate(sku, json.picked_qty, json.status)
+          }
+        })
+      )
+      haptic([40, 30, 80])
+      setSelectedSkus(new Set())
+    } finally {
+      setConfirmingSku(false)
+    }
+  }
 
   const loadData = useCallback(async (quiet = false) => {
     if (!quiet) setSyncStatus('syncing')
@@ -347,6 +428,10 @@ export default function PackerPage({
     try {
       const res = await fetch(`/api/picklist/packer/${short_user_id}`)
       if (!res.ok) {
+        if (res.status === 404) {
+          router.replace('/')
+          return
+        }
         setPageError('Invalid packer link. Please ask your manager for the correct link.')
         setSyncStatus('offline')
         return
@@ -527,9 +612,27 @@ export default function PackerPage({
           </p>
         </div>
 
-        {/* Search bar */}
-        <div className="px-4 pb-3">
-          <div className="relative">
+        {/* Search bar + Select All */}
+        <div className="px-4 pb-3 flex items-center gap-2">
+          {pending.length > 0 && (
+            <button
+              onClick={() =>
+                pending.every(i => selectedSkus.has(i.master_sku))
+                  ? clearAllSelected()
+                  : selectAllPending(pending)
+              }
+              className={`flex-shrink-0 h-10 px-3 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${
+                pending.every(i => selectedSkus.has(i.master_sku)) && selectedSkus.size > 0
+                  ? 'bg-blue-500 border-blue-500 text-white'
+                  : 'bg-gray-100 border-gray-200 text-blue-600'
+              }`}
+            >
+              {pending.every(i => selectedSkus.has(i.master_sku)) && selectedSkus.size > 0
+                ? '✓ All'
+                : 'All'}
+            </button>
+          )}
+          <div className="relative flex-1">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-base">🔍</span>
             <input
               type="text"
@@ -572,6 +675,8 @@ export default function PackerPage({
                 shortUserId={short_user_id}
                 onUpdate={handleItemUpdate}
                 onOpenQtyModal={setQtyModalItem}
+                isSelected={selectedSkus.has(item.master_sku)}
+                onToggleSelect={toggleSelectSku}
               />
             ))}
             {done.length > 0 && (
@@ -588,6 +693,8 @@ export default function PackerPage({
                     shortUserId={short_user_id}
                     onUpdate={handleItemUpdate}
                     onOpenQtyModal={setQtyModalItem}
+                    isSelected={selectedSkus.has(item.master_sku)}
+                    onToggleSelect={toggleSelectSku}
                   />
                 ))}
               </>
@@ -595,6 +702,33 @@ export default function PackerPage({
           </>
         )}
       </div>
+
+      {/* ── Confirm Selected Button ── */}
+      {selectedSkus.size > 0 && (
+        <div className="fixed bottom-6 left-5 z-30">
+          <button
+            onClick={confirmSelected}
+            disabled={confirmingSku}
+            className={`h-10 px-4 rounded-xl shadow-lg flex items-center gap-2 font-semibold text-white text-sm transition-all active:scale-95 ${
+              confirmingSku ? 'bg-green-400 cursor-not-allowed' : 'bg-green-600 active:bg-green-700'
+            }`}
+          >
+            {confirmingSku ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Confirming…</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Confirm {selectedSkus.size} picked</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* ── Floating Sync Button (bottom-right) ── */}
       <div className="fixed bottom-6 right-5 z-30">

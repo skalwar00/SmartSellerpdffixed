@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 
 interface PushItem {
   master_sku: string
@@ -19,17 +18,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No items provided' }, { status: 400 })
   }
 
-  const admin = createAdminClient()
-
   // Auto-cleanup: delete items older than 12 hours
-  await admin
+  await supabase
     .from('picklist_items')
     .delete()
     .eq('user_id', user.id)
     .lt('updated_at', new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString())
 
   // Fetch existing items for this user
-  const { data: existing } = await admin
+  const { data: existing } = await supabase
     .from('picklist_items')
     .select('master_sku, total_qty, picked_qty, status')
     .eq('user_id', user.id)
@@ -64,7 +61,7 @@ export async function POST(req: NextRequest) {
     }
   })
 
-  const { error } = await admin
+  const { error } = await supabase
     .from('picklist_items')
     .upsert(toUpsert, { onConflict: 'user_id,master_sku' })
 

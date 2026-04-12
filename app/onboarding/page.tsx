@@ -12,31 +12,36 @@ export default function OnboardingPage() {
   const handleSelection = async (isComboEnabled: boolean) => {
     const type = isComboEnabled ? 'combo' : 'single'
     setIsLoading(type)
-    const supabase = createClient()
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      router.push('/auth/login')
-      return
+    try {
+      const supabase = createClient()
+
+      // Use getSession() — reads from local storage, no network call needed
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (session?.user) {
+        // Try to save preferences — best effort, never block navigation
+        try {
+          await supabase.auth.updateUser({
+            data: {
+              has_seen_onboarding: true,
+              is_combo_enabled: isComboEnabled,
+            },
+          })
+          // Also try DB update (silently fails if table/columns don't exist)
+          await supabase
+            .from('users_plan')
+            .update({ has_seen_onboarding: true, is_combo_enabled: isComboEnabled })
+            .eq('user_id', session.user.id)
+        } catch {
+          // Ignore — preference save is non-critical
+        }
+      }
+    } catch {
+      // Ignore all errors — always proceed to dashboard
     }
 
-    // Save to user metadata (works without DB migration)
-    await supabase.auth.updateUser({
-      data: {
-        has_seen_onboarding: true,
-        is_combo_enabled: isComboEnabled,
-      },
-    })
-
-    // Also try saving to DB columns if migration has been run
-    await supabase
-      .from('users_plan')
-      .update({
-        has_seen_onboarding: true,
-        is_combo_enabled: isComboEnabled,
-      })
-      .eq('user_id', user.id)
-
+    // Always navigate to dashboard regardless of errors above
     router.push('/dashboard')
   }
 

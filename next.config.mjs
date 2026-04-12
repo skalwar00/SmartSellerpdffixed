@@ -10,9 +10,16 @@ const nextConfig = {
     process.env.REPLIT_DEV_DOMAIN,
     '*.replit.dev',
     '*.pike.replit.dev',
+    '*.sisko.repl.co',
     '*.kirk.repl.co',
     '*.repl.co',
   ].filter(Boolean),
+  webpack(config, { dev }) {
+    if (dev) {
+      config.cache = false
+    }
+    return config
+  },
 }
 
 export default nextConfig

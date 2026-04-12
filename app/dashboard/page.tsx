@@ -20,8 +20,10 @@ import { toast } from 'sonner'
 import {
   Download, Save, RefreshCw, Loader2, Package, CheckCircle2, AlertCircle,
   ChevronDown, ChevronUp, Plus, X, Send, Trash2, Copy, Radio,
+  FileSpreadsheet, Upload, Edit2, Search, Link2,
 } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
+import * as XLSX from 'xlsx'
 
 function SearchableSelect({
   value,
@@ -117,6 +119,12 @@ interface MappingRow {
   matchScore: number
   comboExpanded?: boolean
   comboSkus?: string[]
+}
+
+interface SavedMapping {
+  portalSku: string
+  masterSku: string
+  comboSkus: string[]
 }
 
 interface LiveItem {
@@ -219,12 +227,44 @@ export default function PicklistPage() {
   const [isResetting, setIsResetting] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [liveItems, setLiveItems] = useState<LiveItem[]>([])
+  const [liveLastSynced, setLiveLastSynced] = useState<Date | null>(null)
+  const [liveAutoSyncing, setLiveAutoSyncing] = useState(false)
   const [shortUserId, setShortUserId] = useState<string | null>(null)
   const [securityPin, setSecurityPin] = useState<string | null>(null)
   const isProcessing = isSyncingMaster || isSavingMappings || isProcessingOrders || isGenerating
   const [masterFiles, setMasterFiles] = useState<File[]>([])
   const [orderFiles, setOrderFiles] = useState<File[]>([])
   const [isMasterOpen, setIsMasterOpen] = useState(false)
+
+  // Manage Mappings state
+  const [isManageMappingsOpen, setIsManageMappingsOpen] = useState(false)
+  const [isViewEditOpen, setIsViewEditOpen] = useState(true)
+  const [isExportOpen, setIsExportOpen] = useState(false)
+  const [isImportOpen, setIsImportOpen] = useState(false)
+  const [allMappings, setAllMappings] = useState<SavedMapping[]>([])
+  const [isLoadingMappings, setIsLoadingMappings] = useState(false)
+  const [mappingEdits, setMappingEdits] = useState<Record<string, string>>({})
+  const [isSavingEdits, setIsSavingEdits] = useState(false)
+  const [isDeletingMapping, setIsDeletingMapping] = useState<string | null>(null)
+  const [mappingSearch, setMappingSearch] = useState('')
+  const [importPreview, setImportPreview] = useState<{ portalSku: string; masterSku: string; status: 'new' | 'update' | 'duplicate' }[]>([])
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [isImporting, setIsImporting] = useState(false)
+  const [isRegeneratingLink, setIsRegeneratingLink] = useState(false)
+
+  const fetchLiveItems = useCallback(async (silent = false) => {
+    if (!silent) setLiveAutoSyncing(true)
+    try {
+      const itemsRes = await fetch('/api/picklist/items')
+      if (itemsRes.ok) {
+        const itemsJson = await itemsRes.json()
+        setLiveItems(itemsJson.items || [])
+        setLiveLastSynced(new Date())
+      }
+    } catch { /* silent */ } finally {
+      if (!silent) setLiveAutoSyncing(false)
+    }
+  }, [])
 
   // Setup: load short_user_id & pin + live items — only after auth is confirmed by SWR
   useEffect(() => {
@@ -238,25 +278,32 @@ export default function PicklistPage() {
           setSecurityPin(setupJson.security_pin)
         }
       } catch { /* silent */ }
-      try {
-        const itemsRes = await fetch('/api/picklist/items')
-        if (itemsRes.ok) {
-          const itemsJson = await itemsRes.json()
-          setLiveItems(itemsJson.items || [])
-        }
-      } catch { /* silent */ }
+      await fetchLiveItems(true)
     }
     setup()
-  }, [data?.userId])
+  }, [data?.userId, fetchLiveItems])
 
-  // Supabase Realtime: broadcast when we push, listen for self-updates
+  // Auto-sync: Supabase Realtime + 15s polling fallback
   useEffect(() => {
-    if (!shortUserId) return
+    if (!data?.userId) return
     const supabase = createClient()
-    const channel = supabase.channel(`picklist:${shortUserId}`)
-    channel.subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [shortUserId])
+
+    const channel = supabase
+      .channel('picklist_live_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'picklist_live' },
+        () => { fetchLiveItems(true) }
+      )
+      .subscribe()
+
+    const interval = setInterval(() => fetchLiveItems(true), 15000)
+
+    return () => {
+      supabase.removeChannel(channel)
+      clearInterval(interval)
+    }
+  }, [data?.userId, fetchLiveItems])
 
   const findSkuColumn = (headers: string[]): number => {
     const normalizedHeaders = headers.map(h => h.trim().toLowerCase())
@@ -322,7 +369,8 @@ export default function PicklistPage() {
         if (comboSkus && comboSkus.length > 0) {
           return comboSkus.map(masterSku => ({ ...order, Master_SKU: masterSku }))
         }
-        return [{ ...order, Master_SKU: data.mappingDict[order.Portal_SKU] }]
+        const masterSku = data.mappingDict[order.Portal_SKU]
+        return [{ ...order, Master_SKU: masterSku ?? order.Portal_SKU }]
       })
       setOrders(mappedOrders)
 
@@ -382,14 +430,31 @@ export default function PicklistPage() {
     const snapshot = data
     mutate('user-data', { ...data, masterOptions: skus }, false)
     setMasterFiles([])
-    toast.success(`Synced ${skus.length} master SKUs`)
+    toast.success(`Synced ${skus.length} master SKUs — auto-mapping in progress`)
 
     setIsSyncingMaster(true)
     try {
       const supabase = createClient()
-      const records = skus.map(sku => ({ user_id: data.userId, master_sku: sku }))
-      const { error } = await supabase.from('master_inventory').upsert(records, { onConflict: 'user_id, master_sku' })
-      if (error) throw error
+
+      // 1. Upsert into master_inventory
+      const inventoryRecords = skus.map(sku => ({ user_id: data.userId, master_sku: sku }))
+      const { error: invError } = await supabase
+        .from('master_inventory')
+        .upsert(inventoryRecords, { onConflict: 'user_id, master_sku' })
+      if (invError) throw invError
+
+      // 2. Auto-create self-mappings (portal_sku = master_sku) for new SKUs only
+      //    ignoreDuplicates: true ensures we never overwrite existing mappings
+      const mappingRecords = skus.map(sku => ({
+        user_id: data.userId,
+        portal_sku: sku,
+        master_sku: sku,
+      }))
+      await supabase
+        .from('sku_mapping')
+        .upsert(mappingRecords, { onConflict: 'user_id, portal_sku', ignoreDuplicates: true })
+      // Auto-mapping errors are non-critical — don't throw
+
       mutate('user-data')
     } catch (err) {
       mutate('user-data', snapshot, false)
@@ -466,7 +531,195 @@ export default function PicklistPage() {
     }
   }
 
-  // Aggregate mapped orders into master_sku -> total_qty
+  // ── Manage Mappings handlers ──────────────────────────────────────────────
+
+  const loadAllMappings = async () => {
+    setIsLoadingMappings(true)
+    try {
+      const supabase = createClient()
+      const [{ data: rows, error }, { data: userRes }] = await Promise.all([
+        supabase
+          .from('sku_mapping')
+          .select('portal_sku, master_sku')
+          .order('portal_sku', { ascending: true }),
+        supabase.auth.getUser(),
+      ])
+      if (error) throw error
+      const comboMappings = (userRes.user?.user_metadata?.combo_mappings as Record<string, string[]>) || {}
+      setAllMappings((rows || []).map(r => {
+        const comboValue =
+          comboMappings[r.portal_sku] ||
+          comboMappings[r.portal_sku.toUpperCase()] ||
+          comboMappings[r.portal_sku.toLowerCase()] ||
+          []
+        return {
+          portalSku: r.portal_sku,
+          masterSku: r.master_sku,
+          comboSkus: comboValue
+            .filter(Boolean)
+            .filter(sku => sku.toUpperCase() !== r.master_sku.toUpperCase()),
+        }
+      }))
+      setMappingEdits({})
+    } catch {
+      toast.error('Failed to load mappings')
+    } finally {
+      setIsLoadingMappings(false)
+    }
+  }
+
+  const handleManageMappingsToggle = () => {
+    const opening = !isManageMappingsOpen
+    setIsManageMappingsOpen(opening)
+    if (opening && allMappings.length === 0) loadAllMappings()
+  }
+
+  const handleSaveEdits = async () => {
+    if (!data || Object.keys(mappingEdits).length === 0) return
+    setIsSavingEdits(true)
+    try {
+      const supabase = createClient()
+      const { data: userRes } = await supabase.auth.getUser()
+      const existingCombo = (userRes.user?.user_metadata?.combo_mappings as Record<string, string[]>) || {}
+      const records = Object.entries(mappingEdits).map(([portalSku, masterSku]) => ({
+        user_id: data.userId,
+        portal_sku: portalSku,
+        master_sku: masterSku,
+      }))
+      const { error } = await supabase.from('sku_mapping').upsert(records, { onConflict: 'user_id, portal_sku' })
+      if (error) throw error
+      const updatedCombo = { ...existingCombo }
+      let comboChanged = false
+      Object.entries(mappingEdits).forEach(([portalSku, masterSku]) => {
+        const comboKey =
+          updatedCombo[portalSku] ? portalSku :
+          updatedCombo[portalSku.toUpperCase()] ? portalSku.toUpperCase() :
+          updatedCombo[portalSku.toLowerCase()] ? portalSku.toLowerCase() :
+          null
+        if (!comboKey) return
+        const current = updatedCombo[comboKey].filter(Boolean)
+        const extraSkus = current.slice(1).filter(sku => sku.toUpperCase() !== masterSku.toUpperCase())
+        updatedCombo[comboKey] = [masterSku, ...extraSkus]
+        comboChanged = true
+      })
+      if (comboChanged) {
+        await supabase.auth.updateUser({ data: { combo_mappings: updatedCombo } })
+      }
+      setAllMappings(prev => prev.map(m => mappingEdits[m.portalSku] ? { ...m, masterSku: mappingEdits[m.portalSku] } : m))
+      setMappingEdits({})
+      toast.success(`Saved ${records.length} mapping${records.length !== 1 ? 's' : ''}`)
+      mutate('user-data')
+    } catch {
+      toast.error('Save failed')
+    } finally {
+      setIsSavingEdits(false)
+    }
+  }
+
+  const handleDeleteMapping = async (portalSku: string) => {
+    if (!data) return
+    setIsDeletingMapping(portalSku)
+    try {
+      const supabase = createClient()
+      const [{ error }, { data: userRes }] = await Promise.all([
+        supabase
+          .from('sku_mapping')
+          .delete()
+          .eq('user_id', data.userId)
+          .eq('portal_sku', portalSku),
+        supabase.auth.getUser(),
+      ])
+      if (error) throw error
+      const existingCombo = (userRes.user?.user_metadata?.combo_mappings as Record<string, string[]>) || {}
+      if (existingCombo[portalSku] || existingCombo[portalSku.toUpperCase()] || existingCombo[portalSku.toLowerCase()]) {
+        const updatedCombo = { ...existingCombo }
+        delete updatedCombo[portalSku]
+        delete updatedCombo[portalSku.toUpperCase()]
+        delete updatedCombo[portalSku.toLowerCase()]
+        await supabase.auth.updateUser({ data: { combo_mappings: updatedCombo } })
+      }
+      setAllMappings(prev => prev.filter(m => m.portalSku !== portalSku))
+      setMappingEdits(prev => { const n = { ...prev }; delete n[portalSku]; return n })
+      toast.success('Mapping deleted')
+      mutate('user-data')
+    } catch {
+      toast.error('Delete failed')
+    } finally {
+      setIsDeletingMapping(null)
+    }
+  }
+
+  const handleExportMappings = () => {
+    if (allMappings.length === 0) { toast.error('No mappings to export'); return }
+    const wsData = [
+      ['Portal SKU', 'Master SKU', 'Combo SKUs'],
+      ...allMappings.map(m => [m.portalSku, m.masterSku, m.comboSkus.join(', ')]),
+    ]
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.aoa_to_sheet(wsData)
+    ws['!cols'] = [{ wch: 40 }, { wch: 40 }, { wch: 60 }]
+    XLSX.utils.book_append_sheet(wb, ws, 'SKU Mappings')
+    XLSX.writeFile(wb, 'sku_mappings.xlsx')
+    toast.success(`Exported ${allMappings.length} mappings`)
+  }
+
+  const handleImportFileChange = async (file: File | null) => {
+    setImportFile(file)
+    setImportPreview([])
+    if (!file) return
+    try {
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(buffer, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1 }) as string[][]
+      if (rows.length < 2) { toast.error('File has no data rows'); return }
+
+      const existingMap = new Map(allMappings.map(m => [m.portalSku.toUpperCase(), m.masterSku]))
+      const seen = new Set<string>()
+      const preview: typeof importPreview = []
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i]
+        const portalSku = String(row[0] || '').trim().toUpperCase()
+        const masterSku = String(row[1] || '').trim().toUpperCase()
+        if (!portalSku || !masterSku) continue
+
+        if (seen.has(portalSku)) {
+          preview.push({ portalSku, masterSku, status: 'duplicate' })
+        } else {
+          seen.add(portalSku)
+          preview.push({ portalSku, masterSku, status: existingMap.has(portalSku) ? 'update' : 'new' })
+        }
+      }
+      setImportPreview(preview)
+    } catch {
+      toast.error('Failed to parse file')
+    }
+  }
+
+  const handleConfirmImport = async () => {
+    if (!data || importPreview.length === 0) return
+    const toImport = importPreview.filter(r => r.status !== 'duplicate')
+    if (toImport.length === 0) { toast.error('No valid rows to import'); return }
+    setIsImporting(true)
+    try {
+      const supabase = createClient()
+      const records = toImport.map(r => ({ user_id: data.userId, portal_sku: r.portalSku, master_sku: r.masterSku }))
+      const { error } = await supabase.from('sku_mapping').upsert(records, { onConflict: 'user_id, portal_sku' })
+      if (error) throw error
+      toast.success(`Imported ${toImport.length} mapping${toImport.length !== 1 ? 's' : ''}`)
+      setImportPreview([])
+      setImportFile(null)
+      await loadAllMappings()
+      mutate('user-data')
+    } catch {
+      toast.error('Import failed')
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  // ── Aggregate mapped orders into master_sku -> total_qty
   const getAggregatedItems = () => {
     const agg: Record<string, number> = {}
     for (const order of orders) {
@@ -494,20 +747,16 @@ export default function PicklistPage() {
       const json = await res.json()
 
       // Reload live items
-      const itemsRes = await fetch('/api/picklist/items')
-      if (itemsRes.ok) {
-        const itemsJson = await itemsRes.json()
-        setLiveItems(itemsJson.items || [])
+      await fetchLiveItems(true)
 
-        // Broadcast to packer via Supabase Realtime
-        if (shortUserId) {
-          const supabase = createClient()
-          await supabase.channel(`picklist:${shortUserId}`).send({
-            type: 'broadcast',
-            event: 'picklist_update',
-            payload: { items: itemsJson.items },
-          })
-        }
+      // Broadcast to packer via Supabase Realtime
+      if (shortUserId) {
+        const supabase = createClient()
+        await supabase.channel(`picklist:${shortUserId}`).send({
+          type: 'broadcast',
+          event: 'picklist_update',
+          payload: { items: [] },
+        })
       }
 
       toast.success(`Pushed ${json.pushed} SKUs to live picklist!`)
@@ -540,6 +789,27 @@ export default function PicklistPage() {
     const link = `${window.location.origin}/packer/${shortUserId}`
     navigator.clipboard.writeText(link)
     toast.success('Packer link copied! Share on WhatsApp.')
+  }
+
+  const handleRegenerateLink = async () => {
+    if (isRegeneratingLink) return
+    setIsRegeneratingLink(true)
+    try {
+      const res = await fetch('/api/picklist/regenerate-link', { method: 'POST' })
+      const json = await res.json()
+      if (res.ok && json.short_user_id) {
+        setShortUserId(json.short_user_id)
+        const link = `${window.location.origin}/packer/${json.short_user_id}`
+        navigator.clipboard.writeText(link)
+        toast.success('New packer link generated & copied! Old link is now invalid.')
+      } else {
+        toast.error('Failed to regenerate link.')
+      }
+    } catch {
+      toast.error('Failed to regenerate link.')
+    } finally {
+      setIsRegeneratingLink(false)
+    }
   }
 
   const handleGeneratePicklist = async () => {
@@ -674,7 +944,7 @@ export default function PicklistPage() {
         <Card className={liveItems.length > 0 ? 'border-blue-200 bg-blue-50/30' : ''}>
           <CardHeader>
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <CardTitle className="text-base flex items-center gap-2">
+              <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 <Radio className="h-4 w-4 text-blue-500" />
                 Live Picklist
                 {liveItems.length > 0 && (
@@ -682,13 +952,40 @@ export default function PicklistPage() {
                     {liveItems.length} SKUs
                   </Badge>
                 )}
+                <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground ml-1">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                  </span>
+                  {liveAutoSyncing
+                    ? 'syncing…'
+                    : liveLastSynced
+                    ? `synced ${liveLastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+                    : 'auto-sync on'}
+                </span>
               </CardTitle>
               <div className="flex items-center gap-2 flex-wrap">
                 {shortUserId && (
-                  <Button variant="outline" size="sm" onClick={handleCopyLink}>
-                    <Copy className="h-3.5 w-3.5 mr-1.5" />
-                    Copy Packer Link
-                  </Button>
+                  <>
+                    <Button variant="outline" size="sm" onClick={handleCopyLink}>
+                      <Copy className="h-3.5 w-3.5 mr-1.5" />
+                      Copy Packer Link
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRegenerateLink}
+                      disabled={isRegeneratingLink}
+                      title="Generate a new packer link — old link will stop working"
+                      className="border-amber-200 text-amber-700 hover:bg-amber-50"
+                    >
+                      {isRegeneratingLink
+                        ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                        : <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                      }
+                      Change URL
+                    </Button>
+                  </>
                 )}
                 {liveItems.length > 0 && (
                   <>
@@ -917,57 +1214,6 @@ export default function PicklistPage() {
           </CardContent>
         </Card>
 
-        {orders.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                Orders
-                <Badge variant="secondary">{orders.length} total</Badge>
-              </CardTitle>
-              <CardDescription>
-                {mappedCount} mapped · {unmappedCount} unmapped
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="max-h-[340px] overflow-auto rounded-b-xl">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-background shadow-[0_1px_0_0_hsl(var(--border))] z-10">
-                    <TableRow>
-                      <TableHead className="pl-4">Portal SKU</TableHead>
-                      <TableHead>Master SKU</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead className="pr-4">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orders.slice(0, 20).map((order, idx) => (
-                      <TableRow
-                        key={idx}
-                        className={`transition-colors hover:bg-muted/50 ${idx % 2 !== 0 ? 'bg-muted/20' : ''}`}
-                      >
-                        <TableCell className="pl-4 font-mono text-sm">{order.Portal_SKU}</TableCell>
-                        <TableCell className="font-mono text-sm text-muted-foreground">
-                          {order.Master_SKU || '—'}
-                        </TableCell>
-                        <TableCell className="text-right">{order.Qty}</TableCell>
-                        <TableCell className="pr-4">
-                          <Badge variant={order.Master_SKU ? 'default' : 'destructive'} className="text-xs">
-                            {order.Master_SKU ? 'Mapped' : 'Unmapped'}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {orders.length > 20 && (
-                  <div className="border-t px-4 py-3 text-center text-sm text-muted-foreground">
-                    Showing 20 of {orders.length} orders
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {unmappedRows.length > 0 && data && (
           <Card>
@@ -1003,14 +1249,23 @@ export default function PicklistPage() {
                         <TableRow
                           className={`transition-colors hover:bg-muted/50 ${idx % 2 !== 0 ? 'bg-muted/20' : ''}`}
                         >
-                          <TableCell className="pl-4">
+                          <TableCell
+                            className="pl-4 cursor-pointer select-none"
+                            onClick={() => updateRow(idx, { confirm: !row.confirm })}
+                          >
                             <Checkbox
                               checked={row.confirm}
                               tabIndex={0}
                               onCheckedChange={(checked) => updateRow(idx, { confirm: !!checked })}
+                              onClick={(e) => e.stopPropagation()}
                             />
                           </TableCell>
-                          <TableCell className="font-mono text-sm">{row.portalSku}</TableCell>
+                          <TableCell
+                            className="font-mono text-sm cursor-pointer select-none"
+                            onClick={() => updateRow(idx, { confirm: !row.confirm })}
+                          >
+                            {row.portalSku}
+                          </TableCell>
                           <TableCell>
                             <SearchableSelect
                               value={row.masterSku}
@@ -1109,6 +1364,313 @@ export default function PicklistPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* ── Manage Mappings Card (last, expandable) ─────────────────────── */}
+        <Card>
+          <CardHeader
+            className="cursor-pointer select-none"
+            onClick={handleManageMappingsToggle}
+          >
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Link2 className="h-4 w-4 text-muted-foreground" />
+                Manage SKU Mappings
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                {allMappings.length > 0 && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Link2 className="h-3 w-3" />
+                    {allMappings.length} saved
+                  </Badge>
+                )}
+                {isManageMappingsOpen ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+            </div>
+            <CardDescription>
+              View, edit, delete, export or bulk-import your SKU mappings
+            </CardDescription>
+          </CardHeader>
+
+          {isManageMappingsOpen && (
+            <CardContent className="space-y-3 pt-0">
+
+              {/* Sub-section: View & Edit */}
+              <div className="rounded-lg border">
+                <button
+                  type="button"
+                  onClick={() => setIsViewEditOpen(o => !o)}
+                  className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors rounded-lg"
+                >
+                  <span className="flex items-center gap-2">
+                    <Edit2 className="h-4 w-4 text-muted-foreground" />
+                    View &amp; Edit
+                    {Object.keys(mappingEdits).length > 0 && (
+                      <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+                        {Object.keys(mappingEdits).length} unsaved
+                      </Badge>
+                    )}
+                  </span>
+                  {isViewEditOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                </button>
+
+                {isViewEditOpen && (
+                  <div className="border-t">
+                    {isLoadingMappings ? (
+                      <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Loading mappings…
+                      </div>
+                    ) : allMappings.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-sm text-muted-foreground">No mappings saved yet.</p>
+                    ) : (
+                      <>
+                        <div className="px-4 py-3 border-b">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                            <input
+                              value={mappingSearch}
+                              onChange={e => setMappingSearch(e.target.value)}
+                              placeholder="Search by Portal SKU or Master SKU…"
+                              className="w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-[400px] overflow-auto">
+                          <Table>
+                            <TableHeader className="sticky top-0 bg-background shadow-[0_1px_0_0_hsl(var(--border))] z-10">
+                              <TableRow>
+                                <TableHead className="pl-4">Portal SKU</TableHead>
+                                <TableHead>Master SKU / Combo</TableHead>
+                                <TableHead className="w-12 pr-4" />
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {allMappings
+                                .filter(m =>
+                                  !mappingSearch ||
+                                  m.portalSku.toLowerCase().includes(mappingSearch.toLowerCase()) ||
+                                  m.masterSku.toLowerCase().includes(mappingSearch.toLowerCase()) ||
+                                  m.comboSkus.some(sku => sku.toLowerCase().includes(mappingSearch.toLowerCase()))
+                                )
+                                .map((m, idx) => (
+                                  <TableRow key={m.portalSku} className={idx % 2 !== 0 ? 'bg-muted/20' : ''}>
+                                    <TableCell className="pl-4 font-mono text-sm">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span>{m.portalSku}</span>
+                                        {m.comboSkus.length > 0 && (
+                                          <Badge variant="outline" className="border-purple-200 bg-purple-50 text-xs text-purple-700">
+                                            Combo
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="space-y-2">
+                                        <SearchableSelect
+                                          value={mappingEdits[m.portalSku] ?? m.masterSku}
+                                          options={data?.masterOptions.filter(o => o !== '') || []}
+                                          placeholder="Select master SKU"
+                                          onChange={(v) => setMappingEdits(prev => ({ ...prev, [m.portalSku]: v }))}
+                                          className="w-full"
+                                        />
+                                        {m.comboSkus.length > 0 && (
+                                          <div className="flex flex-wrap items-center gap-1.5">
+                                            <span className="text-xs text-muted-foreground">Combo:</span>
+                                            {m.comboSkus.map(sku => (
+                                              <Badge key={sku} variant="secondary" className="font-mono text-[11px]">
+                                                {sku}
+                                              </Badge>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="pr-4">
+                                      <button
+                                        onClick={() => handleDeleteMapping(m.portalSku)}
+                                        disabled={isDeletingMapping === m.portalSku}
+                                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-50"
+                                        title="Delete mapping"
+                                      >
+                                        {isDeletingMapping === m.portalSku
+                                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                          : <Trash2 className="h-3.5 w-3.5" />}
+                                      </button>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        {Object.keys(mappingEdits).length > 0 && (
+                          <div className="border-t px-4 py-3 flex items-center justify-between">
+                            <span className="text-sm text-amber-600">
+                              {Object.keys(mappingEdits).length} unsaved change{Object.keys(mappingEdits).length !== 1 ? 's' : ''}
+                            </span>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setMappingEdits({})}
+                                disabled={isSavingEdits}
+                              >
+                                Discard
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={handleSaveEdits}
+                                disabled={isSavingEdits}
+                              >
+                                {isSavingEdits ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+                                Save Changes
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Sub-section: Export */}
+              <div className="rounded-lg border">
+                <button
+                  type="button"
+                  onClick={() => setIsExportOpen(o => !o)}
+                  className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors rounded-lg"
+                >
+                  <span className="flex items-center gap-2">
+                    <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
+                    Export to Excel
+                  </span>
+                  {isExportOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                </button>
+                {isExportOpen && (
+                  <div className="border-t px-4 py-4 space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Download all saved mappings as an Excel file. You can edit it and re-import to bulk update.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={handleExportMappings}
+                      disabled={allMappings.length === 0}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download sku_mappings.xlsx
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Sub-section: Import */}
+              <div className="rounded-lg border">
+                <button
+                  type="button"
+                  onClick={() => setIsImportOpen(o => !o)}
+                  className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/40 transition-colors rounded-lg"
+                >
+                  <span className="flex items-center gap-2">
+                    <Upload className="h-4 w-4 text-muted-foreground" />
+                    Import &amp; Bulk Update
+                  </span>
+                  {isImportOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                </button>
+                {isImportOpen && (
+                  <div className="border-t px-4 py-4 space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Upload an Excel file with two columns: <span className="font-mono font-medium">Portal SKU</span> and <span className="font-mono font-medium">Master SKU</span>. Existing mappings will be updated, new ones will be added. Duplicate rows within the file are skipped.
+                    </p>
+                    <label className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 bg-muted/10 px-4 py-8 cursor-pointer hover:border-muted-foreground/50 hover:bg-muted/20 transition-colors">
+                      <Upload className="h-6 w-6 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">
+                        {importFile ? importFile.name : 'Click to upload .xlsx or .csv file'}
+                      </span>
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        className="hidden"
+                        onChange={e => handleImportFileChange(e.target.files?.[0] || null)}
+                      />
+                    </label>
+
+                    {importPreview.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3 text-sm flex-wrap">
+                          <span className="text-green-700 font-medium">
+                            {importPreview.filter(r => r.status === 'new').length} new
+                          </span>
+                          <span className="text-blue-700 font-medium">
+                            {importPreview.filter(r => r.status === 'update').length} update
+                          </span>
+                          {importPreview.filter(r => r.status === 'duplicate').length > 0 && (
+                            <span className="text-amber-700 font-medium">
+                              {importPreview.filter(r => r.status === 'duplicate').length} duplicate (skipped)
+                            </span>
+                          )}
+                        </div>
+                        <div className="max-h-[280px] overflow-auto rounded-md border">
+                          <Table>
+                            <TableHeader className="sticky top-0 bg-background shadow-[0_1px_0_0_hsl(var(--border))] z-10">
+                              <TableRow>
+                                <TableHead className="pl-4">Portal SKU</TableHead>
+                                <TableHead>Master SKU</TableHead>
+                                <TableHead className="pr-4 w-24">Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {importPreview.map((r, idx) => (
+                                <TableRow key={idx} className={idx % 2 !== 0 ? 'bg-muted/20' : ''}>
+                                  <TableCell className="pl-4 font-mono text-sm">{r.portalSku}</TableCell>
+                                  <TableCell className="font-mono text-sm">{r.masterSku}</TableCell>
+                                  <TableCell className="pr-4">
+                                    <Badge
+                                      variant="outline"
+                                      className={
+                                        r.status === 'new' ? 'border-green-300 text-green-700'
+                                          : r.status === 'update' ? 'border-blue-300 text-blue-700'
+                                          : 'border-amber-300 text-amber-700'
+                                      }
+                                    >
+                                      {r.status === 'new' ? 'New' : r.status === 'update' ? 'Update' : 'Duplicate'}
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { setImportPreview([]); setImportFile(null) }}
+                            disabled={isImporting}
+                          >
+                            Clear
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleConfirmImport}
+                            disabled={isImporting || importPreview.filter(r => r.status !== 'duplicate').length === 0}
+                          >
+                            {isImporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+                            Confirm Import ({importPreview.filter(r => r.status !== 'duplicate').length} rows)
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+            </CardContent>
+          )}
+        </Card>
+
       </div>
     </>
   )
