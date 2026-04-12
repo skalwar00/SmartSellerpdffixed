@@ -295,11 +295,11 @@ export default function SubscriptionPage() {
                 </p>
                 <div className="space-y-3 text-sm">
                   {[
-                    { label: 'UPI ID', value: 'aavoni@upi' },
-                    { label: 'Bank Name', value: 'HDFC Bank' },
-                    { label: 'Account No.', value: 'XXXXXXXXXXXX' },
+                    { label: 'UPI ID', value: 'Please Contact' },
+                    { label: 'Bank Name', value: 'Us For Upgrade' },
+                    { label: 'Mobile Number', value: '+91 9079642358' },
                     { label: 'IFSC Code', value: 'HDFC0000000' },
-                    { label: 'Account Name', value: 'Aavoni Technologies' },
+                    { label: 'Account Name', value: 'Smart Seller Pick' },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex justify-between items-center py-2 border-b last:border-b-0">
                       <span className="text-muted-foreground">{label}</span>
