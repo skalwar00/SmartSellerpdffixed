@@ -37,15 +37,6 @@ export default function LoginPage() {
       if (error) throw error;
 
       if (data.user) {
-        // Check user metadata first (no DB migration needed)
-        const hasSeenOnboarding = data.user.user_metadata
-          ?.has_seen_onboarding as boolean | undefined;
-        if (!hasSeenOnboarding) {
-          router.push("/onboarding");
-        } else {
-          router.push("/dashboard");
-        }
-      } else {
         router.push("/dashboard");
       }
     } catch (error: unknown) {

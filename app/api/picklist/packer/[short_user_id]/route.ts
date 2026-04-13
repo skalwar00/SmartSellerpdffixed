@@ -47,8 +47,29 @@ export async function GET(
     return NextResponse.json({ error: itemsErr.message }, { status: 500 })
   }
 
+  // Fetch image URLs from master_inventory (non-critical — silently skip if column missing)
+  let imageMap: Record<string, string> = {}
+  try {
+    const skus = (items || []).map(i => i.master_sku)
+    if (skus.length > 0) {
+      const { data: inventory } = await db
+        .from('master_inventory')
+        .select('master_sku, image_url')
+        .eq('user_id', planRow.user_id)
+        .in('master_sku', skus)
+      inventory?.forEach(row => {
+        if (row.image_url) imageMap[row.master_sku] = row.image_url
+      })
+    }
+  } catch { /* image_url column may not exist yet */ }
+
+  const enrichedItems = (items || []).map(item => ({
+    ...item,
+    image_url: imageMap[item.master_sku] ?? null,
+  }))
+
   return NextResponse.json({
     security_pin: planRow.security_pin,
-    items: items || [],
+    items: enrichedItems,
   })
 }

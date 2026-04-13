@@ -40,8 +40,7 @@ export async function updateSession(request: NextRequest) {
   // Redirect unauthenticated users away from protected routes
   if (
     !session &&
-    (request.nextUrl.pathname.startsWith('/dashboard') ||
-      request.nextUrl.pathname.startsWith('/onboarding'))
+    request.nextUrl.pathname.startsWith('/dashboard')
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'

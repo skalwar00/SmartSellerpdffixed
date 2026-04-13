@@ -420,31 +420,112 @@ export default function PicklistPage() {
   const handleMasterSync = async () => {
     if (!masterFiles[0] || !data) return
 
-    const text = await masterFiles[0].text()
-    const lines = text.split('\n').filter(l => l.trim())
-    const skus = [...new Set(
-      lines.slice(1).map(line => line.split(',')[0]?.trim().toUpperCase()).filter(Boolean)
-    )]
+    const file = masterFiles[0]
+    const fileName = file.name.toLowerCase()
+
+    // ── Parse file (CSV or XLSX/XLS) ──────────────────────────────────────────
+    let rows: string[][]
+    try {
+      if (fileName.endsWith('.csv')) {
+        const text = await file.text()
+        rows = text
+          .split('\n')
+          .filter(l => l.trim())
+          .map(line => parseCSVLine(line))
+      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        const buffer = await file.arrayBuffer()
+        const wb = XLSX.read(buffer, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][]
+      } else {
+        toast.error('Unsupported file type. Use CSV, XLSX, or XLS.')
+        return
+      }
+    } catch {
+      toast.error('Failed to read file. Make sure it is a valid CSV or Excel file.')
+      return
+    }
+
+    if (rows.length < 2) { toast.error('File is empty or has only headers'); return }
+
+    // ── Smart column detection ────────────────────────────────────────────────
+    const headers = rows[0].map(h => String(h ?? '').trim().toLowerCase())
+
+    // Strict: only accept columns named exactly MASTER_SKU / master sku / mastersku
+    const MASTER_SKU_VARIANTS = ['master_sku', 'master sku', 'mastersku']
+    const skuColIdx = MASTER_SKU_VARIANTS.reduce<number>((found, kw) => {
+      if (found !== -1) return found
+      return headers.indexOf(kw)
+    }, -1)
+
+    if (skuColIdx === -1) {
+      const foundHeaders = rows[0].slice(0, 8).map(h => `"${h}"`).join(', ')
+      toast.error(
+        `"MASTER_SKU" column nahi mila.\n` +
+        `File ke columns: ${foundHeaders}.\n` +
+        `Column ka naam exactly "MASTER_SKU" hona chahiye.`,
+        { duration: 7000 }
+      )
+      return
+    }
+
+    // Optional image_url column
+    const imageKeywords = ['image_url', 'image url', 'imageurl', 'image', 'photo_url', 'photo url', 'photo']
+    const imageColIdx = imageKeywords.reduce<number>((found, kw) => {
+      if (found !== -1) return found
+      const idx = headers.indexOf(kw)
+      return idx !== -1 ? idx : -1
+    }, -1)
+
+    // ── Extract SKUs + optional image URLs ────────────────────────────────────
+    const skuImageMap: Record<string, string | null> = {}
+    rows.slice(1).forEach(cols => {
+      const sku = String(cols[skuColIdx] ?? '').trim().toUpperCase()
+      if (!sku) return
+      const imgUrl = imageColIdx !== -1
+        ? (String(cols[imageColIdx] ?? '').trim() || null)
+        : null
+      if (!skuImageMap[sku]) skuImageMap[sku] = imgUrl
+      else if (imgUrl && !skuImageMap[sku]) skuImageMap[sku] = imgUrl
+    })
+    const skus = Object.keys(skuImageMap)
+
     if (skus.length === 0) { toast.error('No SKUs found in file'); return }
 
     const snapshot = data
     mutate('user-data', { ...data, masterOptions: skus }, false)
     setMasterFiles([])
-    toast.success(`Synced ${skus.length} master SKUs — auto-mapping in progress`)
+
+    const imageCount = Object.values(skuImageMap).filter(Boolean).length
+    const msg = imageCount > 0
+      ? `Synced ${skus.length} SKUs with ${imageCount} image URLs`
+      : `Synced ${skus.length} master SKUs — auto-mapping in progress`
+    toast.success(msg)
 
     setIsSyncingMaster(true)
     try {
       const supabase = createClient()
 
-      // 1. Upsert into master_inventory
+      // 1. Upsert SKUs into master_inventory (always safe)
       const inventoryRecords = skus.map(sku => ({ user_id: data.userId, master_sku: sku }))
       const { error: invError } = await supabase
         .from('master_inventory')
         .upsert(inventoryRecords, { onConflict: 'user_id, master_sku' })
       if (invError) throw invError
 
-      // 2. Auto-create self-mappings (portal_sku = master_sku) for new SKUs only
-      //    ignoreDuplicates: true ensures we never overwrite existing mappings
+      // 2. Separately update image_url for rows that have one (non-critical, requires migration 004)
+      const withImages = skus.filter(sku => skuImageMap[sku])
+      if (withImages.length > 0) {
+        for (const sku of withImages) {
+          await supabase
+            .from('master_inventory')
+            .update({ image_url: skuImageMap[sku] })
+            .eq('user_id', data.userId)
+            .eq('master_sku', sku)
+        }
+      }
+
+      // 3. Auto-create self-mappings for new SKUs only (never overwrite existing)
       const mappingRecords = skus.map(sku => ({
         user_id: data.userId,
         portal_sku: sku,
@@ -453,7 +534,6 @@ export default function PicklistPage() {
       await supabase
         .from('sku_mapping')
         .upsert(mappingRecords, { onConflict: 'user_id, portal_sku', ignoreDuplicates: true })
-      // Auto-mapping errors are non-critical — don't throw
 
       mutate('user-data')
     } catch (err) {
@@ -1121,12 +1201,12 @@ export default function PicklistPage() {
           {isMasterOpen && (
             <CardContent className="space-y-4">
               <FileDropzone
-                accept=".csv"
+                accept=".csv,.xlsx,.xls"
                 files={masterFiles}
                 onFilesChange={setMasterFiles}
                 disabled={isSyncingMaster}
-                label="Drop your Master SKU CSV here or click to browse"
-                hint="First column should contain master SKU codes"
+                label="Drop your Master SKU file here or click to browse"
+                hint='CSV, XLSX, XLS — column ka naam exactly "MASTER_SKU" hona zaroori hai (optional: "Image URL" column bhi add kar sakte hain)'
               />
               <div className="flex flex-wrap items-center gap-3">
                 <Button

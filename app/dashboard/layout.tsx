@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { DashboardNavbar } from '@/components/dashboard/navbar'
 import { TrialBanner } from '@/components/dashboard/trial-banner'
 import { Toaster } from '@/components/ui/sonner'
+import { ComboSetupDialog } from '@/components/dashboard/combo-setup-dialog'
 
 export default async function DashboardLayout({
   children,
@@ -55,6 +56,7 @@ export default async function DashboardLayout({
       <main className="flex-1">
         {children}
       </main>
+      <ComboSetupDialog />
       <Toaster />
     </div>
   )

@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useEffect, useCallback, use, useRef } from 'react'
+import { useState, useEffect, useCallback, use, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { LayoutGrid, List } from 'lucide-react'
 
 interface PicklistItem {
   master_sku: string
   total_qty: number
   picked_qty: number
   status: 'pending' | 'picked' | 'updated'
+  image_url?: string | null
 }
 
 type SyncStatus = 'online' | 'syncing' | 'offline'
@@ -184,6 +186,190 @@ function QtyModal({
   )
 }
 
+// ─── Celebration Overlay ──────────────────────────────────────────────────────
+const CONFETTI_COLORS = ['#FF6B6B','#4ECDC4','#45B7D1','#FFEAA7','#96CEB4','#DDA0DD','#FF9F43','#A29BFE']
+
+function CelebrationOverlay({ onDismiss }: { onDismiss: () => void }) {
+  const pieces = useMemo(() => Array.from({ length: 30 }, (_, i) => ({
+    id: i,
+    color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    left: Math.round(Math.random() * 100),
+    delay: parseFloat((Math.random() * 1.8).toFixed(2)),
+    duration: parseFloat((2.4 + Math.random() * 1.8).toFixed(2)),
+    size: Math.round(6 + Math.random() * 8),
+    shape: i % 3, // 0=circle, 1=square, 2=rect
+  })), [])
+
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 4200)
+    return () => clearTimeout(t)
+  }, [onDismiss])
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-hidden pointer-events-none">
+      <style>{`
+        @keyframes ssp-fall {
+          0%   { transform: translateY(-16px) rotate(0deg);   opacity: 1; }
+          100% { transform: translateY(105vh) rotate(600deg); opacity: 0; }
+        }
+        @keyframes ssp-pop {
+          0%   { transform: translate(-50%,-50%) scale(0.4); opacity: 0; }
+          55%  { transform: translate(-50%,-50%) scale(1.08); opacity: 1; }
+          75%  { transform: translate(-50%,-50%) scale(0.97); }
+          100% { transform: translate(-50%,-50%) scale(1);   opacity: 1; }
+        }
+        @keyframes ssp-fade {
+          0%,65% { opacity: 1; }
+          100%    { opacity: 0; }
+        }
+      `}</style>
+
+      {/* Confetti */}
+      {pieces.map(p => (
+        <div
+          key={p.id}
+          style={{
+            position: 'absolute',
+            left: `${p.left}%`,
+            top: -12,
+            width: p.shape === 2 ? `${p.size * 1.8}px` : `${p.size}px`,
+            height: `${p.size}px`,
+            backgroundColor: p.color,
+            borderRadius: p.shape === 0 ? '50%' : '3px',
+            animation: `ssp-fall ${p.duration}s ${p.delay}s ease-in forwards`,
+            willChange: 'transform',
+          }}
+        />
+      ))}
+
+      {/* Achievement card */}
+      <div
+        className="pointer-events-auto"
+        onClick={onDismiss}
+        style={{
+          position: 'fixed',
+          top: '46%',
+          left: '50%',
+          animation: 'ssp-pop 0.55s cubic-bezier(.34,1.56,.64,1) forwards, ssp-fade 4.2s ease-in-out forwards',
+          textAlign: 'center',
+          cursor: 'pointer',
+        }}
+      >
+        <div style={{
+          background: 'linear-gradient(135deg,#667eea,#764ba2)',
+          borderRadius: 24,
+          padding: '28px 40px',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
+          color: '#fff',
+          minWidth: 260,
+          maxWidth: 300,
+        }}>
+          <div style={{ fontSize: 60, lineHeight: 1, marginBottom: 10 }}>🎉</div>
+          <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 6 }}>All Packed!</div>
+          <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 16, lineHeight: 1.5 }}>
+            Excellent work — every item picked!
+          </div>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: 'rgba(255,255,255,0.2)', borderRadius: 100,
+            padding: '6px 16px', fontSize: 13, fontWeight: 700,
+          }}>
+            🏆 Picklist Complete
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.55, marginTop: 14 }}>tap to dismiss</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── URL normalizer ───────────────────────────────────────────────────────────
+function normalizeImageUrl(raw: string): string {
+  try {
+    const u = new URL(raw)
+    // imgur.com/XXXXX  →  i.imgur.com/XXXXX.jpg
+    if (u.hostname === 'imgur.com') {
+      const parts = u.pathname.split('/').filter(Boolean)
+      // Skip album/gallery links (e.g. /a/XXXXX, /gallery/XXXXX)
+      if (parts.length === 1 && parts[0].length > 0) {
+        return `https://i.imgur.com/${parts[0]}.jpg`
+      }
+    }
+    // dropbox.com — force dl=1 for direct download
+    if (u.hostname.includes('dropbox.com')) {
+      u.searchParams.set('dl', '1')
+      return u.toString()
+    }
+  } catch { /* invalid URL — fall through */ }
+  return raw
+}
+
+// ─── Image Lightbox ───────────────────────────────────────────────────────────
+function ImageLightbox({ url, sku, onClose }: { url: string; sku: string; onClose: () => void }) {
+  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
+  const resolvedUrl = normalizeImageUrl(url)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90"
+      onClick={onClose}
+    >
+      <div className="relative w-full max-w-sm px-4" onClick={e => e.stopPropagation()}>
+        <button
+          onClick={onClose}
+          className="absolute -top-10 right-4 text-white text-3xl leading-none opacity-80 hover:opacity-100"
+        >
+          ×
+        </button>
+        <p className="text-white text-xs font-semibold text-center mb-3 opacity-60 uppercase tracking-wide break-all">
+          {sku}
+        </p>
+
+        <div className="relative min-h-[200px] flex items-center justify-center">
+          {/* Loading spinner */}
+          {status === 'loading' && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+            </div>
+          )}
+
+          {/* Error state */}
+          {status === 'error' && (
+            <div className="text-center px-4">
+              <p className="text-white text-3xl mb-3">🖼️</p>
+              <p className="text-white font-semibold text-sm mb-1">Image load nahi hui</p>
+              <p className="text-white/50 text-xs mb-4">
+                Direct image URL use karein<br/>
+                (e.g. i.imgur.com/... ya imgbb.com/...)
+              </p>
+              <a
+                href={resolvedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 text-xs underline break-all"
+              >
+                URL dekhen →
+              </a>
+            </div>
+          )}
+
+          {/* The image (hidden while loading) */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={resolvedUrl}
+            alt={sku}
+            onLoad={() => setStatus('ok')}
+            onError={() => setStatus('error')}
+            className={`w-full rounded-2xl object-contain max-h-[70vh] bg-white shadow-2xl transition-opacity duration-300 ${
+              status === 'ok' ? 'opacity-100' : 'opacity-0 absolute'
+            }`}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Picker Card ──────────────────────────────────────────────────────────────
 function PickerCard({
   item,
@@ -192,6 +378,7 @@ function PickerCard({
   onOpenQtyModal,
   isSelected,
   onToggleSelect,
+  onOpenImage,
 }: {
   item: PicklistItem
   shortUserId: string
@@ -199,6 +386,7 @@ function PickerCard({
   onOpenQtyModal: (item: PicklistItem) => void
   isSelected: boolean
   onToggleSelect: (sku: string) => void
+  onOpenImage?: (item: PicklistItem) => void
 }) {
   const [syncing, setSyncing] = useState(false)
   const isDone = item.status === 'picked'
@@ -278,10 +466,31 @@ function PickerCard({
           </button>
           <p className="font-bold text-gray-900 text-base leading-tight break-all">{item.master_sku}</p>
         </div>
-        {isDone && <span className="ml-2 text-2xl">✅</span>}
-        {syncing && (
-          <div className="ml-2 w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mt-1" />
-        )}
+        <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+          {/* Gallery icon — only show if image_url exists */}
+          {onOpenImage && (
+            <button
+              onClick={() => { haptic(20); onOpenImage(item) }}
+              disabled={!item.image_url}
+              title={item.image_url ? 'View product image' : 'No image available'}
+              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all active:scale-90 ${
+                item.image_url
+                  ? 'text-blue-500 bg-blue-50 active:bg-blue-100'
+                  : 'text-gray-300 cursor-default'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-5-5L5 21" />
+              </svg>
+            </button>
+          )}
+          {isDone && <span className="text-2xl">✅</span>}
+          {syncing && (
+            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          )}
+        </div>
       </div>
 
       <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
@@ -318,6 +527,109 @@ function PickerCard({
         >
           +
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Picker List Row ──────────────────────────────────────────────────────────
+function PickerListRow({
+  item,
+  shortUserId,
+  onUpdate,
+  onOpenQtyModal,
+  isSelected,
+  onToggleSelect,
+}: {
+  item: PicklistItem
+  shortUserId: string
+  onUpdate: (sku: string, newPicked: number, newStatus: string) => void
+  onOpenQtyModal: (item: PicklistItem) => void
+  isSelected: boolean
+  onToggleSelect: (sku: string) => void
+}) {
+  const [syncing, setSyncing] = useState(false)
+  const isDone = item.status === 'picked'
+  const isUpdated = item.status === 'updated'
+
+  const sendPick = useCallback(async (newPicked: number) => {
+    setSyncing(true)
+    try {
+      const res = await fetch('/api/picklist/pick', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          short_user_id: shortUserId,
+          master_sku: item.master_sku,
+          picked_qty: newPicked,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        haptic(newPicked >= item.total_qty ? [40, 30, 80] : 40)
+        onUpdate(item.master_sku, json.picked_qty, json.status)
+      }
+    } finally {
+      setSyncing(false)
+    }
+  }, [shortUserId, item.master_sku, item.total_qty, onUpdate])
+
+  const increment = () => { if (item.picked_qty < item.total_qty && !syncing) sendPick(item.picked_qty + 1) }
+  const decrement = () => { if (item.picked_qty > 0 && !syncing) sendPick(item.picked_qty - 1) }
+
+  const rowBg = isSelected
+    ? 'bg-green-50 border-green-200'
+    : isDone
+    ? 'bg-green-50 border-green-200'
+    : isUpdated
+    ? 'bg-orange-50 border-orange-200'
+    : 'bg-white border-gray-200'
+
+  const accent = isDone ? 'text-green-600' : isUpdated ? 'text-orange-500' : 'text-gray-900'
+  const btnAccent = isDone ? 'bg-green-500' : isUpdated ? 'bg-orange-400' : 'bg-blue-500'
+
+  return (
+    <div className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-all ${rowBg} ${syncing ? 'opacity-70' : ''}`}>
+      {/* Checkbox */}
+      <button
+        onClick={() => { haptic(25); onToggleSelect(item.master_sku) }}
+        className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-all active:scale-90 ${
+          isSelected ? 'bg-green-500 border-green-500' : 'bg-white border-gray-300'
+        }`}
+      >
+        {isSelected && (
+          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        )}
+      </button>
+
+      {/* SKU name */}
+      <button
+        onClick={() => onOpenQtyModal(item)}
+        className="flex-1 min-w-0 text-left"
+      >
+        <p className="text-sm font-semibold text-gray-900 break-all leading-tight">{item.master_sku}</p>
+        {isUpdated && <p className="text-xs text-orange-500 font-medium">Qty updated — re-check</p>}
+      </button>
+
+      {/* Counter */}
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <button onClick={() => onOpenQtyModal(item)} className="min-w-[44px] text-center">
+          <span className={`text-base font-black ${accent}`}>{item.picked_qty}</span>
+          <span className="text-gray-400 text-sm"> / {item.total_qty}</span>
+        </button>
+
+        <button
+          onClick={increment}
+          disabled={item.picked_qty >= item.total_qty || syncing}
+          className={`w-8 h-8 rounded-lg text-white text-xl font-bold flex items-center justify-center disabled:opacity-30 active:scale-95 active:opacity-80 transition-transform ${btnAccent}`}
+        >
+          +
+        </button>
+
+        {isDone && <span className="text-base">✅</span>}
+        {syncing && <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />}
       </div>
     </div>
   )
@@ -363,8 +675,12 @@ export default function PackerPage({
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
   const [qtyModalItem, setQtyModalItem] = useState<PicklistItem | null>(null)
+  const [imageItem, setImageItem] = useState<PicklistItem | null>(null)
   const [selectedSkus, setSelectedSkus] = useState<Set<string>>(new Set())
   const [confirmingSku, setConfirmingSku] = useState(false)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [showCelebration, setShowCelebration] = useState(false)
+  const celebratedRef = useRef(false)
 
   const toggleSelectSku = (sku: string) => {
     setSelectedSkus(prev => {
@@ -487,6 +803,20 @@ export default function PackerPage({
     return () => { supabase.removeChannel(channel) }
   }, [authPin, short_user_id])
 
+  // Celebration trigger — fires once when all items are picked
+  useEffect(() => {
+    if (items.length === 0) return
+    const allDone = items.every(i => i.status === 'picked')
+    if (allDone && !celebratedRef.current) {
+      celebratedRef.current = true
+      setShowCelebration(true)
+      haptic([40, 30, 40, 30, 100])
+    }
+    if (!allDone) {
+      celebratedRef.current = false
+    }
+  }, [items])
+
   const handlePinAttempt = (pin: string) => {
     if (pin === correctPin) {
       haptic([30, 20, 80])
@@ -574,8 +904,15 @@ export default function PackerPage({
   const pending = filtered.filter(i => i.status !== 'picked')
   const done = filtered.filter(i => i.status === 'picked')
 
+  const effectiveView = viewMode
+
   return (
     <div className="min-h-screen bg-gray-50">
+
+      {/* ── Celebration ── */}
+      {showCelebration && (
+        <CelebrationOverlay onDismiss={() => setShowCelebration(false)} />
+      )}
 
       {/* ── Sticky Header ── */}
       <div className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
@@ -650,14 +987,40 @@ export default function PackerPage({
               </button>
             )}
           </div>
+
+          {/* View toggle */}
+          <div className="flex-shrink-0 flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+            <button
+              onClick={() => setViewMode('grid')}
+              title="Grid view"
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                effectiveView === 'grid'
+                  ? 'bg-white shadow-sm text-blue-600'
+                  : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              title="List view"
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                effectiveView === 'list'
+                  ? 'bg-white shadow-sm text-blue-600'
+                  : 'text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* ── Item List ── */}
-      <div className="px-4 py-4 space-y-3 pb-28">
+      <div className={`px-4 py-4 pb-28 ${effectiveView === 'list' ? 'space-y-1.5' : 'space-y-3'}`}>
         {filtered.length === 0 && search ? (
           <div className="text-center py-12">
-            <p className="text-gray-500 font-medium">No SKU found for "{search}"</p>
+            <p className="text-gray-500 font-medium">No SKU found for &ldquo;{search}&rdquo;</p>
             <button onClick={() => setSearch('')} className="text-blue-500 text-sm mt-2">Clear search</button>
           </div>
         ) : items.length === 0 ? (
@@ -668,7 +1031,17 @@ export default function PackerPage({
           </div>
         ) : (
           <>
-            {pending.map(item => (
+            {pending.map(item => effectiveView === 'list' ? (
+              <PickerListRow
+                key={item.master_sku}
+                item={item}
+                shortUserId={short_user_id}
+                onUpdate={handleItemUpdate}
+                onOpenQtyModal={setQtyModalItem}
+                isSelected={selectedSkus.has(item.master_sku)}
+                onToggleSelect={toggleSelectSku}
+              />
+            ) : (
               <PickerCard
                 key={item.master_sku}
                 item={item}
@@ -677,6 +1050,7 @@ export default function PackerPage({
                 onOpenQtyModal={setQtyModalItem}
                 isSelected={selectedSkus.has(item.master_sku)}
                 onToggleSelect={toggleSelectSku}
+                onOpenImage={setImageItem}
               />
             ))}
             {done.length > 0 && (
@@ -686,7 +1060,17 @@ export default function PackerPage({
                     Completed ({done.length})
                   </p>
                 </div>
-                {done.map(item => (
+                {done.map(item => effectiveView === 'list' ? (
+                  <PickerListRow
+                    key={item.master_sku}
+                    item={item}
+                    shortUserId={short_user_id}
+                    onUpdate={handleItemUpdate}
+                    onOpenQtyModal={setQtyModalItem}
+                    isSelected={selectedSkus.has(item.master_sku)}
+                    onToggleSelect={toggleSelectSku}
+                  />
+                ) : (
                   <PickerCard
                     key={item.master_sku}
                     item={item}
@@ -695,6 +1079,7 @@ export default function PackerPage({
                     onOpenQtyModal={setQtyModalItem}
                     isSelected={selectedSkus.has(item.master_sku)}
                     onToggleSelect={toggleSelectSku}
+                    onOpenImage={setImageItem}
                   />
                 ))}
               </>
@@ -756,6 +1141,15 @@ export default function PackerPage({
           item={qtyModalItem}
           onClose={() => setQtyModalItem(null)}
           onSet={handleQtySet}
+        />
+      )}
+
+      {/* ── Image Lightbox ── */}
+      {imageItem?.image_url && (
+        <ImageLightbox
+          url={imageItem.image_url}
+          sku={imageItem.master_sku}
+          onClose={() => setImageItem(null)}
         />
       )}
     </div>
