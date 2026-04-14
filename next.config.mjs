@@ -10,6 +10,7 @@ const nextConfig = {
     process.env.REPLIT_DEV_DOMAIN,
     '*.replit.dev',
     '*.pike.replit.dev',
+    '*.spock.repl.co',
     '*.sisko.repl.co',
     '*.kirk.repl.co',
     '*.repl.co',

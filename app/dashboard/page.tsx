@@ -193,7 +193,8 @@ async function fetchUserData() {
   const masterOptions = inventoryRes.data?.map(i => i.master_sku.toUpperCase()) || []
   const isComboEnabled = (user.user_metadata?.is_combo_enabled as boolean) ?? false
   const comboMappings = (user.user_metadata?.combo_mappings as Record<string, string[]>) || {}
-  return { mappingDict, masterOptions, userId: user.id, isComboEnabled, comboMappings }
+  const pendingUnmappedSkus = (user.user_metadata?.pending_unmapped_skus as string[]) || []
+  return { mappingDict, masterOptions, userId: user.id, isComboEnabled, comboMappings, pendingUnmappedSkus }
 }
 
 function parseCSVLine(line: string): string[] {
@@ -251,6 +252,8 @@ export default function PicklistPage() {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [isRegeneratingLink, setIsRegeneratingLink] = useState(false)
+  const [labelUnmappedRows, setLabelUnmappedRows] = useState<{ portalSku: string; masterSku: string; comboExpanded?: boolean; comboSkus?: string[] }[]>([])
+  const [isSavingLabelMappings, setIsSavingLabelMappings] = useState(false)
 
   const fetchLiveItems = useCallback(async (silent = false) => {
     if (!silent) setLiveAutoSyncing(true)
@@ -265,6 +268,89 @@ export default function PicklistPage() {
       if (!silent) setLiveAutoSyncing(false)
     }
   }, [])
+
+  // Initialize label unmapped rows from user metadata
+  useEffect(() => {
+    if (!data?.pendingUnmappedSkus) return
+    setLabelUnmappedRows(
+      data.pendingUnmappedSkus.map(sku => ({ portalSku: sku, masterSku: '' }))
+    )
+  }, [data?.pendingUnmappedSkus?.join(',')])
+
+  const addLabelComboSku = (idx: number) => {
+    setLabelUnmappedRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r
+      const usedSkus = new Set([r.masterSku, ...(r.comboSkus || [])])
+      const available = (data?.masterOptions || []).filter(o => o && !usedSkus.has(o))
+      const nextSku = available.length > 0 ? available[0] : ''
+      return { ...r, comboSkus: [...(r.comboSkus || []), nextSku] }
+    }))
+  }
+
+  const updateLabelComboSku = (rowIdx: number, skuIdx: number, value: string) => {
+    setLabelUnmappedRows(prev => prev.map((r, i) => {
+      if (i !== rowIdx) return r
+      const updated = [...(r.comboSkus || [])]
+      updated[skuIdx] = value
+      return { ...r, comboSkus: updated }
+    }))
+  }
+
+  const removeLabelComboSku = (rowIdx: number, skuIdx: number) => {
+    setLabelUnmappedRows(prev => prev.map((r, i) => {
+      if (i !== rowIdx) return r
+      return { ...r, comboSkus: (r.comboSkus || []).filter((_, si) => si !== skuIdx) }
+    }))
+  }
+
+  const handleSaveLabelMappings = async () => {
+    const supabase = createClient()
+    const toSave = labelUnmappedRows.filter(r => r.masterSku.trim())
+    if (toSave.length === 0) {
+      toast.error('Pehle Master SKU select karo')
+      return
+    }
+    setIsSavingLabelMappings(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      const comboRows = toSave.filter(r => (r.comboSkus || []).filter(Boolean).length > 0)
+      if (comboRows.length > 0) {
+        const existingCombo = (user.user_metadata?.combo_mappings as Record<string, string[]>) || {}
+        const updatedCombo = {
+          ...existingCombo,
+          ...Object.fromEntries(
+            comboRows.map(r => [
+              r.portalSku,
+              [r.masterSku, ...(r.comboSkus || []).filter(Boolean)],
+            ])
+          ),
+        }
+        await supabase.auth.updateUser({ data: { combo_mappings: updatedCombo } })
+      }
+
+      const records = toSave.map(r => ({
+        user_id: user.id,
+        portal_sku: r.portalSku,
+        master_sku: r.masterSku.trim().toUpperCase(),
+      }))
+      const { error } = await supabase.from('sku_mapping').upsert(records, { onConflict: 'user_id, portal_sku' })
+      if (error) throw error
+
+      const savedPortalSkus = new Set(toSave.map(r => r.portalSku))
+      const remaining = (data?.pendingUnmappedSkus || []).filter(s => !savedPortalSkus.has(s))
+      await supabase.auth.updateUser({ data: { pending_unmapped_skus: remaining } })
+
+      toast.success(`${toSave.length} SKU mapping${toSave.length > 1 ? 's' : ''} save ho gayi`)
+      setLabelUnmappedRows(remaining.map(sku => ({ portalSku: sku, masterSku: '' })))
+      mutate('user-data')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setIsSavingLabelMappings(false)
+    }
+  }
 
   // Setup: load short_user_id & pin + live items — only after auth is confirmed by SWR
   useEffect(() => {
@@ -1294,6 +1380,131 @@ export default function PicklistPage() {
           </CardContent>
         </Card>
 
+
+        {labelUnmappedRows.length > 0 && data && (
+          <Card className="border-amber-200">
+            <CardHeader className="bg-amber-50/60">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                Label Cropper — Unmapped SKUs
+                <Badge variant="outline" className="border-amber-300 text-amber-700">{labelUnmappedRows.length} SKUs</Badge>
+                {isComboEnabled && (
+                  <Badge variant="secondary" className="text-xs">Combo Mode</Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                {isComboEnabled
+                  ? 'Ye SKUs label se aaye hain. Master SKU select karo. Combo ke liye + dabao.'
+                  : 'Ye SKUs label se aaye hain aur inki koi mapping nahi mili. Master SKU select karo aur save karo.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="max-h-[400px] overflow-auto">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background shadow-[0_1px_0_0_hsl(var(--border))] z-10">
+                    <TableRow>
+                      <TableHead className="pl-4 w-[220px]">Portal SKU (Label)</TableHead>
+                      <TableHead>Master SKU</TableHead>
+                      {isComboEnabled && <TableHead className="w-10" />}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {labelUnmappedRows.map((row, idx) => (
+                      <Fragment key={idx}>
+                        <TableRow className={idx % 2 !== 0 ? 'bg-muted/20' : ''}>
+                          <TableCell className="pl-4 font-mono text-sm text-amber-800">{row.portalSku}</TableCell>
+                          <TableCell>
+                            <SearchableSelect
+                              value={row.masterSku}
+                              options={data.masterOptions.filter(o => o !== '')}
+                              placeholder="Select master SKU"
+                              onChange={(value) => {
+                                const updated = [...labelUnmappedRows]
+                                updated[idx] = { ...updated[idx], masterSku: value }
+                                setLabelUnmappedRows(updated)
+                              }}
+                              className="w-full"
+                            />
+                          </TableCell>
+                          {isComboEnabled && (
+                            <TableCell>
+                              <button
+                                onClick={() => {
+                                  const updated = [...labelUnmappedRows]
+                                  updated[idx] = { ...updated[idx], comboExpanded: !updated[idx].comboExpanded }
+                                  setLabelUnmappedRows(updated)
+                                }}
+                                className="flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-muted-foreground/40 text-muted-foreground transition-colors hover:border-amber-500 hover:bg-amber-50 hover:text-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1"
+                                title="Add combo SKUs"
+                              >
+                                {row.comboExpanded ? (
+                                  <ChevronUp className="h-3.5 w-3.5" />
+                                ) : (
+                                  <Plus className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            </TableCell>
+                          )}
+                        </TableRow>
+
+                        {isComboEnabled && row.comboExpanded && (
+                          <TableRow className={idx % 2 !== 0 ? 'bg-muted/20' : ''}>
+                            <TableCell />
+                            <TableCell colSpan={2} className="py-2 pr-4">
+                              <div className="flex flex-col gap-2 border-l-2 border-amber-200 pl-3">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  Additional Master SKUs (combo components)
+                                </p>
+                                {(row.comboSkus || []).map((sku, si) => (
+                                  <div key={si} className="flex items-center gap-2">
+                                    <SearchableSelect
+                                      value={sku}
+                                      options={data.masterOptions.filter(o => o !== '')}
+                                      placeholder="Select SKU"
+                                      onChange={(value) => updateLabelComboSku(idx, si, value)}
+                                      className="flex-1"
+                                    />
+                                    <button
+                                      onClick={() => removeLabelComboSku(idx, si)}
+                                      className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus:outline-none"
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  onClick={() => addLabelComboSku(idx)}
+                                  className="flex items-center gap-1.5 self-start rounded-md border border-dashed border-amber-300 px-2.5 py-1 text-xs text-amber-600 transition-colors hover:border-amber-500 hover:bg-amber-50 focus:outline-none"
+                                >
+                                  <Plus className="h-3 w-3" />
+                                  Add SKU
+                                </button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t p-4">
+                <p className="text-xs text-muted-foreground">
+                  {labelUnmappedRows.filter(r => r.masterSku).length} / {labelUnmappedRows.length} mapped
+                </p>
+                <Button
+                  size="sm"
+                  onClick={handleSaveLabelMappings}
+                  disabled={isSavingLabelMappings || labelUnmappedRows.every(r => !r.masterSku)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  {isSavingLabelMappings ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+                  Save Mappings
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {unmappedRows.length > 0 && data && (
           <Card>

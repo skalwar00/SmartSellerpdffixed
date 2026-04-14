@@ -14,9 +14,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import {
-  BarChart3,
   Package,
-  DollarSign,
   ShoppingBag,
   Shirt,
   CreditCard,
@@ -24,6 +22,7 @@ import {
   ChevronDown,
   AlertTriangle,
   Lock,
+  Scissors,
 } from 'lucide-react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { PinDialog } from '@/components/dashboard/pin-dialog'
@@ -43,6 +42,7 @@ interface NavbarProps {
 
 const navItems = [
   { title: 'Picklist', url: '/dashboard', icon: Package },
+  { title: 'Label Cropper', url: '/dashboard/label-cropper', icon: Scissors },
   { title: 'Flipkart Profit', url: '/dashboard/flipkart', icon: ShoppingBag },
   { title: 'Myntra Profit', url: '/dashboard/myntra', icon: Shirt },
   { title: 'Subscription', url: '/dashboard/subscription', icon: CreditCard },
@@ -77,8 +77,6 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
     <>
       <nav className="sticky top-0 z-50 w-full border-b border-[#E5E7EB] bg-white">
         <div className="mx-auto flex h-16 max-w-screen-xl items-center justify-between px-4 sm:px-6">
-
-          {/* Left: Logo */}
           <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5">
             <img src="/logo.png" alt="SSP Logo" className="h-9 w-9 object-contain" />
             <span className="hidden text-sm font-bold text-gray-900 sm:block">
@@ -86,7 +84,6 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
             </span>
           </Link>
 
-          {/* Center: Nav links (desktop) */}
           <div className="hidden items-center gap-0.5 md:flex">
             {navItems.map((item) => {
               const isActive =
@@ -113,7 +110,6 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
             })}
           </div>
 
-          {/* Right: Plan badge + User menu */}
           <div className="flex items-center gap-2">
             {mounted && (
               isPro ? (
@@ -181,7 +177,6 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
           </div>
         </div>
 
-        {/* Mobile nav — horizontal scroll */}
         <div className="flex overflow-x-auto border-t border-[#E5E7EB] px-3 py-1.5 gap-0.5 md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {navItems.map((item) => {
             const isActive =
@@ -203,7 +198,6 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
               </Link>
             )
           })}
-          {/* Costing in mobile nav */}
           <button
             onClick={() => setPinOpen(true)}
             className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-all duration-200"

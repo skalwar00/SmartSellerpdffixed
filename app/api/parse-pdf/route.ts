@@ -62,12 +62,19 @@ export async function POST(req: NextRequest) {
 
       const pageText = items.map((it) => it.str).join(" ").toUpperCase();
 
-      // Page filter — unchanged
-      if (!pageText.includes("PICKLIST") || pageText.includes("COURIER")) {
+      // Page filter: must be a picklist page, not a shipping label
+      if (!pageText.includes("PICKLIST")) continue;
+      if (
+        pageText.includes("COURIER") ||
+        pageText.includes("AWB") ||
+        pageText.includes("NOT FOR RESALE") ||
+        pageText.includes("SHIPPING/CUSTOMER") ||
+        pageText.includes("CUSTOMER ADDRESS")
+      ) {
         continue;
       }
 
-      // Row grouping by Y axis — unchanged
+      // Row grouping by Y axis
       const rowMap: Map<number, Array<{ x: number; text: string }>> = new Map();
 
       for (const item of items) {
@@ -102,14 +109,39 @@ export async function POST(req: NextRequest) {
           cells.sort((a, b) => a.x - b.x).map((c) => c.text)
         );
 
-      for (const row of sortedRows) {
+      for (const rawRow of sortedRows) {
+        if (rawRow.length < 3) continue;
+
+        // Skip header rows
+        if (rawRow[0]?.toUpperCase().trim() === "SKU") continue;
+
+        // Skip serial number at row[0] (pure integer like "1", "2", "3")
+        let row = rawRow;
+        if (/^\d+$/.test(row[0]?.trim() ?? "")) {
+          row = row.slice(1);
+        }
         if (row.length < 3) continue;
 
-        if (row[0]?.toUpperCase().trim() === "SKU") continue;
+        // Merge hyphen-split tokens: ["HF005", "-", "RUST"] → ["HF005-RUST"]
+        // PDFs sometimes encode a hyphenated word as separate text runs.
+        const mergedRow: string[] = [];
+        let i = 0;
+        while (i < row.length) {
+          if (row[i] === "-" && mergedRow.length > 0 && i + 1 < row.length) {
+            mergedRow[mergedRow.length - 1] =
+              mergedRow[mergedRow.length - 1] + "-" + row[i + 1];
+            i += 2;
+          } else {
+            mergedRow.push(row[i]);
+            i++;
+          }
+        }
 
-        const styleCode = row[0]?.toUpperCase().trim();
-        const size = row[row.length - 2]?.toUpperCase().trim();
-        const qtyRaw = row[row.length - 1];
+        if (mergedRow.length < 3) continue;
+
+        const styleCode = mergedRow[0]?.toUpperCase().trim();
+        const size = mergedRow[mergedRow.length - 2]?.toUpperCase().trim();
+        const qtyRaw = mergedRow[mergedRow.length - 1];
 
         if (!styleCode || !size) continue;
 
@@ -127,7 +159,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Convert to array — unchanged
+    // Convert to array
     const orders = Array.from(ordersMap.entries()).map(
       ([Portal_SKU, Qty]) => ({
         Portal_SKU,

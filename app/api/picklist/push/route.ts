@@ -6,6 +6,31 @@ interface PushItem {
   total_qty: number
 }
 
+interface PortalItem {
+  portal_sku: string
+  qty: number
+}
+
+function normalizeSku(value: string) {
+  return value.trim().toUpperCase()
+}
+
+function aggregateItems(items: PushItem[], forceUppercase = false) {
+  const agg = new Map<string, PushItem>()
+
+  for (const item of items) {
+    const masterSku = forceUppercase ? normalizeSku(item.master_sku) : item.master_sku.trim()
+    const qty = Number(item.total_qty) || 0
+    if (!masterSku || qty <= 0) continue
+    const key = normalizeSku(masterSku)
+    const current = agg.get(key)
+    if (current) current.total_qty += qty
+    else agg.set(key, { master_sku: masterSku, total_qty: qty })
+  }
+
+  return Array.from(agg.values())
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -13,8 +38,56 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { items } = (await req.json()) as { items: PushItem[] }
-  if (!items || items.length === 0) {
+  const { items, portalItems } = (await req.json()) as { items?: PushItem[]; portalItems?: PortalItem[] }
+  let pushItems = items ? aggregateItems(items) : []
+  const unmappedSkus: string[] = []
+
+  if (pushItems.length === 0 && portalItems && portalItems.length > 0) {
+    const { data: mappings } = await supabase
+      .from('sku_mapping')
+      .select('portal_sku, master_sku')
+      .eq('user_id', user.id)
+
+    const mappingDict: Record<string, string> = {}
+    mappings?.forEach((item) => {
+      mappingDict[normalizeSku(item.portal_sku)] = normalizeSku(item.master_sku)
+    })
+
+    const comboMappings = (user.user_metadata?.combo_mappings as Record<string, string[]>) || {}
+    const mappedItems = portalItems.flatMap((item) => {
+      const portalSku = normalizeSku(item.portal_sku)
+      const qty = Number(item.qty) || 0
+      if (!portalSku || qty <= 0) return []
+
+      const comboSkus =
+        comboMappings[item.portal_sku] ||
+        comboMappings[portalSku] ||
+        comboMappings[item.portal_sku.toLowerCase()]
+
+      if (comboSkus && comboSkus.length > 0) {
+        return comboSkus
+          .map((masterSku) => normalizeSku(masterSku))
+          .filter(Boolean)
+          .map((master_sku) => ({ master_sku, total_qty: qty }))
+      }
+
+      if (!mappingDict[portalSku]) {
+        unmappedSkus.push(portalSku)
+      }
+
+      return [{ master_sku: mappingDict[portalSku] ?? portalSku, total_qty: qty }]
+    })
+
+    pushItems = aggregateItems(mappedItems, true)
+
+    if (unmappedSkus.length > 0) {
+      const existingUnmapped = (user.user_metadata?.pending_unmapped_skus as string[]) || []
+      const merged = Array.from(new Set([...existingUnmapped, ...unmappedSkus]))
+      await supabase.auth.updateUser({ data: { pending_unmapped_skus: merged } })
+    }
+  }
+
+  if (pushItems.length === 0) {
     return NextResponse.json({ error: 'No items provided' }, { status: 400 })
   }
 
@@ -35,7 +108,7 @@ export async function POST(req: NextRequest) {
     (existing || []).map(e => [e.master_sku.toUpperCase(), e])
   )
 
-  const toUpsert = items.map(item => {
+  const toUpsert = pushItems.map(item => {
     const key = item.master_sku.toUpperCase()
     const prev = existingMap.get(key)
 
@@ -69,5 +142,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ success: true, pushed: toUpsert.length })
+  return NextResponse.json({ success: true, pushed: toUpsert.length, unmappedSkus })
 }
