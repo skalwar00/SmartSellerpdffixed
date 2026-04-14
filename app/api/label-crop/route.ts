@@ -192,27 +192,80 @@ function getPageText(parsedPage: any, yMin?: number, yMax?: number) {
   return getPageLines(parsedPage, yMin, yMax).map((line) => line.text).join(' ')
 }
 
+function rawLabelTextToSku(raw: string) {
+  const trimmed = raw.trim()
+  // Strip a leading bare serial number (e.g. "1 WHT-10XL" → "WHT-10XL").
+  const withoutSerial = trimmed.replace(/^\d{1,3}\s+/, '')
+  const base = withoutSerial || trimmed
+  return base
+    .replace(/\s+/g, '-')          // spaces → hyphens
+    .replace(/[()]/g, '-')         // parentheses → hyphens: "PT-CBO(Rani+SkyBlue)-7XL"
+    .replace(/\+/g, '-')           // plus sign → hyphen: "Rani+SkyBlue"
+    .toUpperCase()
+    .replace(/[^A-Z0-9._/-]/g, '') // remove anything else
+    .replace(/-{2,}/g, '-')
+    .replace(/^[._/-]+|[._/-]+$/g, '')
+}
+
 function getSkuFromRowPrefix(value: string) {
-  const compactMatch = value.match(/^\s*\d{1,3}\s*([A-Z0-9][A-Z0-9._/-]{2,})\s*$/i)
-  if (!compactMatch?.[1]) return null
-  return normalizeSku(compactMatch[1])
+  // With leading serial + space: "1 BT001-Teal Blue-6XL" or "1 WHT-10XL"
+  const flexMatch = value.match(/^\s*\d{1,3}\s+(.+?)\s*$/i)
+  if (flexMatch?.[1]) {
+    const sku = rawLabelTextToSku(flexMatch[1])
+    if (sku && sku.length >= 4) return sku
+  }
+  // Merged serial (no space): "1PT-CBO(Rani+SkyBlue)-7XL" where "1" ran into the SKU.
+  // Only applies when the digit is immediately followed by a letter (not another digit).
+  const mergedSerialMatch = value.match(/^\s*\d{1,3}([A-Z].+?)\s*$/i)
+  if (mergedSerialMatch?.[1]) {
+    const sku = rawLabelTextToSku(mergedSerialMatch[1])
+    if (sku && sku.length >= 4) return sku
+  }
+  // No leading serial: "WHT-10XL" or "BT001-TEAL-BLUE-6XL"
+  // Use rawLabelTextToSku so parentheses/+ are handled uniformly.
+  const noSerialMatch = value.match(/^\s*([A-Za-z][A-Za-z0-9._/ +()+-]{2,})\s*$/i)
+  if (noSerialMatch?.[1]) {
+    const sku = rawLabelTextToSku(noSerialMatch[1])
+    if (sku && sku.length >= 4 && /[A-Z]/.test(sku)) return sku
+  }
+  return null
 }
 
 function extractSkuRowsFromLine(line: string): SkuItem[] {
   const cleaned = normalizeText(line)
-  const matches = [...cleaned.matchAll(/(?:^|\s)(\d{1,3})\s*([A-Z0-9][A-Z0-9._/-]{2,})\s*\|/gi)]
   const items: SkuItem[] = []
 
   const SIZE_ONLY = /^(XS|S|M|L|XL|XXL|XXXL|XXXXL|0XL|1XL|2XL|3XL|4XL|5XL|6XL|7XL|8XL|9XL|10XL|FREE|FS|OS|ONE|ONESIZE|\d{1,4})$/i
 
-  for (let index = 0; index < matches.length; index++) {
-    const match = matches[index]
+  // Flexible pattern: {number} {SKU text including spaces} | ... {qty}
+  // This handles SKUs like "BT001-Teal Blue-6XL" or "Black Pant_7XL"
+  const flexMatches = [...cleaned.matchAll(/(?:^|\s)(\d{1,3})\s+(.+?)\s*\|/gi)]
+  for (let index = 0; index < flexMatches.length; index++) {
+    const match = flexMatches[index]
+    const sku = rawLabelTextToSku(match[2])
+    if (!sku || sku.length < 4) continue
+    if (SIZE_ONLY.test(sku)) continue
+
+    const segmentStart = (match.index ?? 0) + match[0].length
+    const segmentEnd = flexMatches[index + 1]?.index ?? cleaned.length
+    const segment = cleaned.slice(segmentStart, segmentEnd)
+    const qtyMatch = segment.match(/(\d{1,3})\s*$/)
+    const qty = Math.max(1, qtyMatch ? Number(qtyMatch[1]) || 1 : 1)
+    items.push({ sku, qty })
+  }
+
+  if (items.length > 0) return items
+
+  // Strict pattern fallback: no-space SKU token before pipe
+  const strictMatches = [...cleaned.matchAll(/(?:^|\s)(\d{1,3})\s*([A-Z0-9][A-Z0-9._/-]{2,})\s*\|/gi)]
+  for (let index = 0; index < strictMatches.length; index++) {
+    const match = strictMatches[index]
     const sku = normalizeSku(match[2])
     if (!sku || sku.length < 4) continue
     if (SIZE_ONLY.test(sku)) continue
 
     const segmentStart = (match.index ?? 0) + match[0].length
-    const segmentEnd = matches[index + 1]?.index ?? cleaned.length
+    const segmentEnd = strictMatches[index + 1]?.index ?? cleaned.length
     const segment = cleaned.slice(segmentStart, segmentEnd)
     const qtyMatch = segment.match(/(\d{1,3})\s*$/)
     const qty = Math.max(1, qtyMatch ? Number(qtyMatch[1]) || 1 : 1)
@@ -252,20 +305,28 @@ function uniqueSkuItems(items: SkuItem[]) {
 function extractSkuItems(parsedPage: any, pageIndex: number, yMin?: number, yMax?: number): SkuItem[] {
   const lines = getPageLines(parsedPage, yMin, yMax)
   const rowItems: SkuItem[] = []
+  let headerLineIdx = -1
   let skuTableStarted = false
 
   for (let index = 0; index < lines.length; index++) {
     const cleaned = normalizeText(lines[index].text)
     const upper = cleaned.toUpperCase()
-    if (upper.includes('SKU') && upper.includes('|')) {
+
+    // Detect the SKU table header — accept lines that contain "SKU" plus either
+    // a pipe or "DESCRIPTION", because the pipe can land on a different y-row in
+    // pdf2json causing it to be absent from the reconstructed header text.
+    if (upper.includes('SKU') && (upper.includes('|') || upper.includes('DESCRIPTION'))) {
+      headerLineIdx = index
       skuTableStarted = true
       continue
     }
 
-    if (skuTableStarted && (upper.includes('FMPC') || upper.includes('NOT FOR RESALE') || upper.includes('TAX INVOICE'))) {
-      break
-    }
+    // Stop at end-of-label markers (only after we have started collecting).
+    if (skuTableStarted && (upper.includes('FMPC') || upper.includes('NOT FOR RESALE') || upper.includes('TAX INVOICE'))) break
 
+    // Try to extract SKU rows from every line (not just post-header).
+    // extractSkuRowsFromLine requires a pipe delimiter so it won't match
+    // free-form address text.
     const items = extractSkuRowsFromLine(cleaned)
     if (items.length > 0) {
       rowItems.push(...items)
@@ -275,26 +336,27 @@ function extractSkuItems(parsedPage: any, pageIndex: number, yMin?: number, yMax
 
   if (rowItems.length > 0) return uniqueSkuItems(rowItems)
 
-  const text = normalizeText(getPageText(parsedPage, yMin, yMax)).toUpperCase()
-  const patterns = [
-    /(?:SELLER SKU|SKU ID|SKU CODE|PRODUCT SKU|STYLE CODE|STYLE ID|SKU|STYLE)\s*[:#-]?\s*([A-Z0-9][A-Z0-9._/-]{2,})/i,
-    /(?:FSN|EAN|ORDER ITEM ID)\s*[:#-]?\s*([A-Z0-9][A-Z0-9._/-]{3,})/i,
-  ]
+  // If neither header nor data rows were found, do not guess — return PAGE-N.
+  if (headerLineIdx < 0) return [{ sku: `PAGE-${pageIndex + 1}`, qty: 1 }]
 
-  for (const pattern of patterns) {
-    const match = text.match(pattern)
-    if (match?.[1]) return [{ sku: normalizeSku(match[1]), qty: 1 }]
+  // Header was found but row parsing yielded nothing (e.g. serial number on a
+  // separate y-line). Try a direct pipe-split on the lines right after the header.
+  const END_MARKERS = ['FMPC', 'NOT FOR RESALE', 'TAX INVOICE']
+  for (let i = headerLineIdx + 1; i < Math.min(headerLineIdx + 8, lines.length); i++) {
+    const cleaned = normalizeText(lines[i].text)
+    if (END_MARKERS.some((m) => cleaned.toUpperCase().includes(m))) break
+    if (!cleaned.includes('|')) continue
+
+    const beforePipe = cleaned.split('|')[0]
+    const sku = getSkuFromRowPrefix(beforePipe)
+    if (sku && sku.length >= 4) {
+      const afterPipe = cleaned.slice(cleaned.indexOf('|') + 1)
+      const qtyMatch = afterPipe.match(/(\d{1,3})\s*$/)
+      return [{ sku, qty: Math.max(1, qtyMatch ? Number(qtyMatch[1]) || 1 : 1) }]
+    }
   }
 
-  const blocked = new Set(['FLIPKART', 'MYNTRA', 'MEESHO', 'ORDER', 'INVOICE', 'SHIPPING', 'LABEL', 'DELIVERY', 'CUSTOMER', 'SELLER', 'SKU', 'QTY', 'COD', 'PREPAID'])
-  const candidates = text.match(/[A-Z0-9]{2,}[-_/][A-Z0-9._/-]{2,}/g) ?? []
-  const picked = candidates.find((candidate) => {
-    const sku = normalizeSku(candidate)
-    if (sku.length < 4 || sku.length > 45) return false
-    return ![...blocked].some((word) => sku.includes(word))
-  })
-
-  return [{ sku: picked ? normalizeSku(picked) : `PAGE-${pageIndex + 1}`, qty: 1 }]
+  return [{ sku: `PAGE-${pageIndex + 1}`, qty: 1 }]
 }
 
 function extractMeeshoSkuItems(parsedPage: any, pageIndex: number, yMin?: number, yMax?: number): SkuItem[] {
@@ -604,11 +666,18 @@ export async function POST(req: NextRequest) {
         cropSources = [{ sourcePageIndex: i, cropBox: getFlipkartCropBox(parsedPage, sw, sh) }]
       }
 
+      // For Flipkart, the shipping label occupies the top ~50% of the combined
+      // label+invoice page. Passing a yMax derived from the page height keeps
+      // extractSkuItems from reading addresses and invoice descriptions below.
+      const flipkartLabelYMax = portal === 'flipkart'
+        ? (parsedPage?.Height || 52.625) * 0.55
+        : undefined
+
       for (const source of cropSources) {
         const items =
           portal === 'meesho'
             ? extractMeeshoSkuItems(parsedPage, i, source.yMin, source.yMax)
-            : extractSkuItems(parsedPage, i)
+            : extractSkuItems(parsedPage, i, undefined, flipkartLabelYMax)
 
         const firstItem = items[0] ?? { sku: `PAGE-${i + 1}`, qty: 1 }
         for (const item of items) {
@@ -642,13 +711,22 @@ export async function POST(req: NextRequest) {
       return true
     })
 
-    // Build output PDF — one page per unique physical label
-    for (const item of uniquePageItems) {
-      const sourcePage = sourcePdf.getPage(item.sourcePageIndex)
-      const { left, bottom, right, top, width, height } = item.cropBox
-      const embeddedPage = await outputPdf.embedPage(sourcePage, { left, bottom, right, top })
-      const page = outputPdf.addPage([width, height])
-      page.drawPage(embeddedPage, { x: 0, y: 0, width, height })
+    // Build output PDF — bulk copy pages then set MediaBox for cropping.
+    // copyPages is far faster than embedPage because it references PDF objects
+    // directly instead of serialising each page into a Form XObject.
+    const sourceIndices = uniquePageItems.map((item) => item.sourcePageIndex)
+    const copiedPages = await outputPdf.copyPages(sourcePdf, sourceIndices)
+
+    for (let i = 0; i < uniquePageItems.length; i++) {
+      const item = uniquePageItems[i]
+      const { left, bottom, width, height } = item.cropBox
+      const copiedPage = copiedPages[i]
+      // Redefine both MediaBox and CropBox to the label crop region.
+      // The coordinate origin stays in PDF user space so viewers show
+      // only the label portion of the original page.
+      copiedPage.setMediaBox(left, bottom, width, height)
+      copiedPage.setCropBox(left, bottom, width, height)
+      outputPdf.addPage(copiedPage)
     }
 
     // Build labels for response — all SKU items (for picklist/summary accuracy)

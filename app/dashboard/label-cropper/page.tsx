@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DashboardHeader } from '@/components/dashboard/sidebar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -68,6 +68,36 @@ export default function LabelCropperPage() {
   const [isPushed, setIsPushed] = useState(false)
   const [result, setResult] = useState<CropResult | null>(null)
   const [unmappedSkus, setUnmappedSkus] = useState<string[]>([])
+  const [progress, setProgress] = useState(0)
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const PROGRESS_STAGES = [
+    { label: 'Uploading PDF…', target: 15 },
+    { label: 'Parsing pages…', target: 40 },
+    { label: 'Cropping labels…', target: 70 },
+    { label: 'Sorting by SKU…', target: 90 },
+  ]
+
+  const startProgress = () => {
+    setProgress(0)
+    let current = 0
+    progressIntervalRef.current = setInterval(() => {
+      setProgress((prev) => {
+        // slow down as it approaches 92 — never auto-complete
+        const increment = prev < 30 ? 2 : prev < 60 ? 1.2 : prev < 85 ? 0.6 : 0.2
+        current = Math.min(92, prev + increment)
+        return current
+      })
+    }, 300)
+  }
+
+  const finishProgress = () => {
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
+    setProgress(100)
+    setTimeout(() => setProgress(0), 800)
+  }
+
+  useEffect(() => () => { if (progressIntervalRef.current) clearInterval(progressIntervalRef.current) }, [])
 
   const handlePortalSelect = (portal: PortalKey) => {
     setSelectedPortal(portal)
@@ -86,6 +116,7 @@ export default function LabelCropperPage() {
     setIsProcessing(true)
     setResult(null)
     setIsPushed(false)
+    startProgress()
 
     try {
       const formData = new FormData()
@@ -97,9 +128,11 @@ export default function LabelCropperPage() {
 
       if (!response.ok) throw new Error(data.error || 'Label crop failed')
 
+      finishProgress()
       setResult(data)
       toast.success(`${data.totalLabels} labels cropped — ${data.totalSkuItems ?? data.labels?.length ?? 0} SKU items found`)
     } catch (error) {
+      finishProgress()
       console.error(error)
       toast.error(error instanceof Error ? error.message : 'Failed to crop labels')
     } finally {
@@ -331,14 +364,75 @@ export default function LabelCropperPage() {
                     </div>
                   )}
                 </>
+              ) : isProcessing ? (
+                <div className="space-y-4 rounded-xl border border-blue-100 bg-blue-50/60 p-5">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-5 w-5 shrink-0 animate-spin text-blue-600" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-blue-900">
+                        {progress < 15
+                          ? 'Uploading PDF…'
+                          : progress < 45
+                          ? 'Parsing pages…'
+                          : progress < 75
+                          ? 'Cropping labels…'
+                          : progress < 100
+                          ? 'Sorting by SKU…'
+                          : 'Done!'}
+                      </p>
+                      <p className="text-xs text-blue-700">This may take 10–30 seconds for large files</p>
+                    </div>
+                    <span className="text-sm font-bold tabular-nums text-blue-700">{Math.round(progress)}%</span>
+                  </div>
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-blue-200">
+                    <div
+                      className="h-full rounded-full bg-blue-600 transition-all duration-300 ease-out"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-blue-400">
+                    {['Upload', 'Parse', 'Crop', 'Sort'].map((stage, i) => (
+                      <span key={stage} className={progress >= i * 25 + 1 ? 'font-semibold text-blue-600' : ''}>
+                        {stage}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               ) : (
                 <div className="rounded-xl border border-dashed py-10 text-center text-sm text-gray-400">
-                  {isProcessing ? 'Processing labels…' : 'Output will appear here after processing.'}
+                  Output will appear here after processing.
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
+
+        {/* How it works guide */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <p className="mb-4 text-sm font-semibold text-gray-700">How it works</p>
+          <div className="grid gap-3 sm:grid-cols-4">
+            {[
+              { step: '1', icon: '🗂️', title: 'Select Portal', desc: 'Choose Flipkart or Meesho based on your label PDF.' },
+              { step: '2', icon: '📤', title: 'Upload PDF', desc: 'Drop your label PDF (any number of pages).' },
+              { step: '3', icon: '✂️', title: 'Crop & Sort', desc: 'Click "Crop Labels" — labels are cropped and sorted by SKU automatically.' },
+              { step: '4', icon: '📥', title: 'Download / Push', desc: 'Download the sorted PDF or push SKUs directly to your live picklist.' },
+            ].map(({ step, icon, title, desc }) => (
+              <div key={step} className="flex gap-3">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600">
+                  {step}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-800">{icon} {title}</p>
+                  <p className="mt-0.5 text-xs leading-relaxed text-gray-500">{desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 border-t border-gray-100 pt-3 text-xs text-gray-400">
+            💡 <strong>Tip:</strong> Flipkart labels remove invoice pages automatically. Meesho labels are detected per-page. Output PDF is sorted by SKU so picking is faster.
+          </p>
+        </div>
+
       </div>
     </div>
   )
