@@ -228,6 +228,21 @@ function getSkuFromRowPrefix(value: string) {
     const sku = rawLabelTextToSku(noSerialMatch[1])
     if (sku && sku.length >= 4 && /[A-Z]/.test(sku)) return sku
   }
+  // Merged 1-digit serial + digit-starting SKU where the SKU itself has 4+ leading digits:
+  // e.g. "11048_GREEN_L" → serial "1" + SKU "1048_GREEN_L".
+  // Using \d{4,} in the capture ensures we don't misfire on standalone SKUs like
+  // "7001-Black-L" (stripping "7" would leave only 3 digits "001", which fails \d{4,}).
+  const mergedDigitSerialMatch = value.match(/^\s*\d(\d{4,}[_.-][A-Za-z][A-Za-z0-9_.-]*)\s*$/i)
+  if (mergedDigitSerialMatch?.[1]) {
+    const sku = rawLabelTextToSku(mergedDigitSerialMatch[1])
+    if (sku && sku.length >= 4) return sku
+  }
+  // Numeric-starting SKU with no serial prefix: "7001-Black-L"
+  // Identified by a digit followed by alphanums and at least one separator/letter component.
+  if (/^\s*\d[A-Za-z0-9]*[-._][A-Za-z0-9]/.test(value)) {
+    const sku = rawLabelTextToSku(value.trim())
+    if (sku && sku.length >= 4) return sku
+  }
   return null
 }
 
@@ -249,15 +264,19 @@ function extractSkuRowsFromLine(line: string): SkuItem[] {
     const segmentStart = (match.index ?? 0) + match[0].length
     const segmentEnd = flexMatches[index + 1]?.index ?? cleaned.length
     const segment = cleaned.slice(segmentStart, segmentEnd)
-    const qtyMatch = segment.match(/(\d{1,3})\s*$/)
+    // Use the FIRST number right after the pipe — not the last — so trailing totals
+    // or barcodes on the same page don't corrupt the quantity.
+    const qtyMatch = segment.match(/^\s*(\d{1,3})/)
     const qty = Math.max(1, qtyMatch ? Number(qtyMatch[1]) || 1 : 1)
     items.push({ sku, qty })
   }
 
   if (items.length > 0) return items
 
-  // Strict pattern fallback: no-space SKU token before pipe
-  const strictMatches = [...cleaned.matchAll(/(?:^|\s)(\d{1,3})\s*([A-Z0-9][A-Z0-9._/-]{2,})\s*\|/gi)]
+  // Strict pattern fallback: no-space SKU token before pipe.
+  // Only strip leading digits if followed by a space OR the SKU starts with a letter,
+  // so numeric-prefix SKUs like "7001-Black-L" are not partially consumed.
+  const strictMatches = [...cleaned.matchAll(/(?:^|\s)(\d{1,3})(?:\s+|(?=[A-Za-z]))([A-Z0-9][A-Z0-9._/-]{2,})\s*\|/gi)]
   for (let index = 0; index < strictMatches.length; index++) {
     const match = strictMatches[index]
     const sku = normalizeSku(match[2])
@@ -267,7 +286,7 @@ function extractSkuRowsFromLine(line: string): SkuItem[] {
     const segmentStart = (match.index ?? 0) + match[0].length
     const segmentEnd = strictMatches[index + 1]?.index ?? cleaned.length
     const segment = cleaned.slice(segmentStart, segmentEnd)
-    const qtyMatch = segment.match(/(\d{1,3})\s*$/)
+    const qtyMatch = segment.match(/^\s*(\d{1,3})/)
     const qty = Math.max(1, qtyMatch ? Number(qtyMatch[1]) || 1 : 1)
     items.push({ sku, qty })
   }
@@ -280,7 +299,7 @@ function extractSkuRowsFromLine(line: string): SkuItem[] {
     const sku = getSkuFromRowPrefix(beforePipe)
     if (sku && sku.length >= 4 && !SIZE_ONLY2.test(sku)) {
       const afterPipe = cleaned.slice(cleaned.indexOf('|') + 1)
-      const qtyMatch = afterPipe.match(/(\d{1,3})\s*$/)
+      const qtyMatch = afterPipe.match(/^\s*(\d{1,3})/)
       return [{ sku, qty: Math.max(1, qtyMatch ? Number(qtyMatch[1]) || 1 : 1) }]
     }
   }
@@ -351,7 +370,7 @@ function extractSkuItems(parsedPage: any, pageIndex: number, yMin?: number, yMax
     const sku = getSkuFromRowPrefix(beforePipe)
     if (sku && sku.length >= 4) {
       const afterPipe = cleaned.slice(cleaned.indexOf('|') + 1)
-      const qtyMatch = afterPipe.match(/(\d{1,3})\s*$/)
+      const qtyMatch = afterPipe.match(/^\s*(\d{1,3})/)
       return [{ sku, qty: Math.max(1, qtyMatch ? Number(qtyMatch[1]) || 1 : 1) }]
     }
   }

@@ -29,13 +29,21 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
-  // Use getSession() instead of getUser() here for performance.
-  // getSession() reads the JWT from the cookie locally (no network call, ~1ms).
-  // Actual server-side auth enforcement via getUser() happens in layout.tsx
-  // which is the right place for security-critical verification.
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
+  let session = null
+  try {
+    const { data } = await supabase.auth.getSession()
+    session = data.session
+  } catch {
+    // Cookies are corrupted / too large — clear all Supabase auth cookies and
+    // send the user to login so a fresh session can be established.
+    const clearResponse = NextResponse.redirect(new URL('/auth/login', request.url))
+    request.cookies.getAll().forEach(({ name }) => {
+      if (name.startsWith('sb-')) {
+        clearResponse.cookies.set(name, '', { maxAge: 0, path: '/' })
+      }
+    })
+    return clearResponse
+  }
 
   // Redirect unauthenticated users away from protected routes
   if (
