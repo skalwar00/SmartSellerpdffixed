@@ -4,10 +4,24 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
+const BOOK_DEMO_URL = 'https://wa.me/your-number-here'
+
 export default async function LandingPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (user) redirect('/dashboard')
+  try {
+    const supabase = await createClient()
+    const { data, error } = await supabase.auth.getUser()
+    if (!error && data.user) redirect('/dashboard')
+  } catch (err) {
+    // next/navigation's redirect() throws internally — let it propagate so the
+    // redirect actually happens. Only swallow genuine cookie/JSON parse errors.
+    if (
+      err instanceof Error &&
+      (err.message.includes('NEXT_REDIRECT') || (err as { digest?: string }).digest?.startsWith('NEXT_REDIRECT'))
+    ) {
+      throw err
+    }
+    // Malformed or oversized session cookies — show the landing page normally.
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -26,8 +40,12 @@ export default async function LandingPage() {
             <Link href="#how-it-works" className="text-sm text-muted-foreground transition-colors hover:text-foreground">How it works</Link>
             <Link href="#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Features</Link>
             <Link href="#pricing" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Pricing</Link>
+            <Link href={BOOK_DEMO_URL} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 transition-colors hover:text-blue-700">Book Demo</Link>
           </nav>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild className="hidden sm:flex border-blue-500 text-blue-600 hover:bg-blue-50">
+              <Link href={BOOK_DEMO_URL} target="_blank" rel="noopener noreferrer">Book Demo</Link>
+            </Button>
             <Button variant="ghost" size="sm" asChild><Link href="/auth/login">Log in</Link></Button>
             <Button size="sm" asChild>
               <Link href="/auth/sign-up">
@@ -425,86 +443,6 @@ export default async function LandingPage() {
                     <span className="font-semibold text-red-600">{count}</span>
                   </div>
                 ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Live Packer ── */}
-      <section className="py-16 sm:py-24 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-900 text-white overflow-hidden">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="grid items-center gap-12 lg:grid-cols-2">
-            <div className="flex flex-col gap-6">
-              <div className="inline-flex w-fit items-center gap-2 rounded-full bg-blue-500/20 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-blue-300">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
-                </span>
-                Live Packer System
-              </div>
-              <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Push orders. Packer picks.<br className="hidden sm:block" />
-                <span className="text-blue-300"> No app install needed.</span>
-              </h2>
-              <p className="text-base leading-relaxed text-blue-100/80 sm:text-lg">
-                Ek click mein apni team ko live picklist bhejein. Packer mobile browser mein
-                kholta hai — koi download nahi, koi login nahi. Real-time sync se har pick
-                turant dashboard pe dikhti hai.
-              </p>
-              <ul className="flex flex-col gap-3">
-                {[
-                  ['📲', 'Packer ko sirf ek link — koi app install nahi'],
-                  ['⚡', 'Real-time sync — pick hote hi dashboard pe update'],
-                  ['🖼️', 'Product images seedha picklist mein dikhti hain'],
-                  ['🔒', 'PIN-protected — sirf aapki team access kar sake'],
-                  ['🎉', 'Sari qty pack hone par celebration animation'],
-                ].map(([icon, text]) => (
-                  <li key={text} className="flex items-start gap-3">
-                    <span className="text-lg leading-tight flex-shrink-0">{icon}</span>
-                    <span className="text-sm leading-relaxed text-blue-100/90">{text}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="pt-2">
-                <Link href="/auth/sign-up" className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-blue-900 shadow-lg transition hover:bg-blue-50 active:scale-95">
-                  Try it free <ArrowRight className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Phone mockup */}
-            <div className="flex justify-center lg:justify-end">
-              <div className="relative w-[220px] sm:w-[260px]">
-                <div className="rounded-[2.5rem] border-4 border-white/20 bg-gray-900 p-2 shadow-2xl">
-                  <div className="rounded-[2rem] bg-gray-50 overflow-hidden">
-                    <div className="flex items-center justify-between bg-white px-4 py-2 text-[10px] font-semibold text-gray-500">
-                      <span>Picklist</span>
-                      <span className="flex items-center gap-1 text-green-600"><span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />Live</span>
-                    </div>
-                    <div className="space-y-1.5 bg-gray-50 p-2">
-                      {[
-                        {sku:'KURTA-BLU-M',total:3,picked:3,done:true},
-                        {sku:'PALAZZO-BLK-L',total:2,picked:1,done:false},
-                        {sku:'DUPATTA-RED-FS',total:5,picked:0,done:false},
-                        {sku:'TOP-WHT-S',total:1,picked:0,done:false},
-                      ].map(item=>(
-                        <div key={item.sku} className={`flex items-center gap-2 rounded-lg border px-2 py-2 text-[10px] ${item.done?'border-green-200 bg-green-50':'border-gray-200 bg-white'}`}>
-                          <div className={`h-3.5 w-3.5 flex-shrink-0 rounded border-2 flex items-center justify-center ${item.done?'border-green-500 bg-green-500':'border-gray-300'}`}>
-                            {item.done && <span className="text-[7px] text-white font-black">✓</span>}
-                          </div>
-                          <span className={`flex-1 font-semibold truncate ${item.done?'text-green-700':'text-gray-800'}`}>{item.sku}</span>
-                          <span className={`font-black ${item.done?'text-green-600':'text-blue-600'}`}>{item.picked}</span>
-                          <span className="text-gray-400">/{item.total}</span>
-                          <div className={`h-5 w-5 rounded-md flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 ${item.done?'bg-green-400 opacity-30':'bg-blue-500'}`}>+</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="bg-white border-t border-gray-100 px-3 py-2 text-center text-[9px] text-gray-400">1 of 4 picked · syncing...</div>
-                  </div>
-                </div>
-                <div className="absolute -right-6 top-8 rounded-xl bg-green-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg">✅ Picked!</div>
-                <div className="absolute -left-8 bottom-12 rounded-xl bg-white px-3 py-1.5 text-xs font-bold text-gray-800 shadow-lg">⚡ Real-time</div>
               </div>
             </div>
           </div>

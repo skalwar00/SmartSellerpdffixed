@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
 
   const { items, portalItems } = (await req.json()) as { items?: PushItem[]; portalItems?: PortalItem[] }
   let pushItems = items ? aggregateItems(items) : []
+  const unmappedSkuSet = new Set<string>()
   const unmappedSkus: string[] = []
 
   if (pushItems.length === 0 && portalItems && portalItems.length > 0) {
@@ -72,13 +73,16 @@ export async function POST(req: NextRequest) {
       }
 
       if (!mappingDict[portalSku]) {
-        unmappedSkus.push(portalSku)
+        unmappedSkuSet.add(portalSku)
       }
 
       return [{ master_sku: mappingDict[portalSku] ?? portalSku, total_qty: qty }]
     })
 
     pushItems = aggregateItems(mappedItems, true)
+
+    // Deduplicated list of unmapped SKUs (Set ensures each SKU appears once)
+    unmappedSkus.push(...unmappedSkuSet)
 
     if (unmappedSkus.length > 0) {
       const existingUnmapped = (user.user_metadata?.pending_unmapped_skus as string[]) || []
@@ -141,6 +145,17 @@ export async function POST(req: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
+
+  const totalQtyPushed = toUpsert.reduce((s, i) => s + (Number(i.total_qty) || 0), 0)
+  supabase.from('user_activity_log').insert({
+    user_id: user.id,
+    event_type: 'picklist_push',
+    metadata: {
+      sku_count: toUpsert.length,
+      total_qty: totalQtyPushed,
+      unmapped_count: unmappedSkus.length,
+    },
+  }).then(() => {})
 
   return NextResponse.json({ success: true, pushed: toUpsert.length, unmappedSkus })
 }

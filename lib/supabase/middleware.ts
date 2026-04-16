@@ -1,7 +1,34 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// If total cookie size exceeds this, clear auth cookies to prevent Vercel 494 errors
+const MAX_COOKIE_HEADER_SIZE = 7000
+
+function getTotalCookieSize(request: NextRequest): number {
+  return request.cookies.getAll().reduce((total, { name, value }) => {
+    return total + name.length + value.length + 2
+  }, 0)
+}
+
+function clearAuthCookies(response: NextResponse, request: NextRequest) {
+  request.cookies.getAll().forEach(({ name }) => {
+    if (name.startsWith('sb-')) {
+      response.cookies.set(name, '', { maxAge: 0, path: '/' })
+    }
+  })
+}
+
 export async function updateSession(request: NextRequest) {
+  // Guard against bloated cookies causing Vercel 494 (REQUEST_HEADER_TOO_LARGE).
+  // If cookies are already oversized, clear auth cookies and redirect to login so
+  // the user can establish a fresh, correctly-sized session.
+  const cookieSize = getTotalCookieSize(request)
+  if (cookieSize > MAX_COOKIE_HEADER_SIZE) {
+    const clearResponse = NextResponse.redirect(new URL('/auth/login', request.url))
+    clearAuthCookies(clearResponse, request)
+    return clearResponse
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -29,19 +56,16 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
+  // Use getSession() to read the session directly from cookies — no network call,
+  // so auth checks are fast and reliable even if Supabase is momentarily unreachable.
   let session = null
   try {
     const { data } = await supabase.auth.getSession()
     session = data.session
   } catch {
-    // Cookies are corrupted / too large — clear all Supabase auth cookies and
-    // send the user to login so a fresh session can be established.
+    // Session cookie is corrupted — clear and redirect to login
     const clearResponse = NextResponse.redirect(new URL('/auth/login', request.url))
-    request.cookies.getAll().forEach(({ name }) => {
-      if (name.startsWith('sb-')) {
-        clearResponse.cookies.set(name, '', { maxAge: 0, path: '/' })
-      }
-    })
+    clearAuthCookies(clearResponse, request)
     return clearResponse
   }
 

@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import Link from 'next/link'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +16,7 @@ import {
 import {
   Crown, Clock, Search, MoreHorizontal, Loader2,
   ShieldOff, RefreshCw, Zap, AlertCircle, Users,
+  Tag, Package, Activity,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -25,7 +27,11 @@ type Plan = {
   user_id: string
   plan_type: string
   expiry_date: string
-  email?: string
+  email?: string | null
+  created_at?: string | null
+  last_sign_in_at?: string | null
+  sku_count?: number
+  picklist_count?: number
 }
 
 function getDaysLeft(expiry: string) {
@@ -36,6 +42,11 @@ function PlanBadge({ plan, daysLeft }: { plan: string; daysLeft: number }) {
   if (plan === 'pro') return <Badge className="bg-amber-100 text-amber-800 border border-amber-200">Pro</Badge>
   if (daysLeft > 0) return <Badge className="bg-blue-100 text-blue-800 border border-blue-200">Trial · {daysLeft}d left</Badge>
   return <Badge className="bg-red-100 text-red-800 border border-red-200">Expired</Badge>
+}
+
+function formatDate(d?: string | null) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 export default function AdminUsersPage() {
@@ -147,7 +158,8 @@ export default function AdminUsersPage() {
                   <tr className="border-b bg-gray-50/50">
                     <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">User</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Plan</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden md:table-cell">Expiry</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden lg:table-cell">Usage</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide hidden md:table-cell">Joined / Last seen</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide">Actions</th>
                   </tr>
                 </thead>
@@ -159,17 +171,41 @@ export default function AdminUsersPage() {
                       <tr key={p.user_id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="px-4 py-3">
                           <div>
-                            <p className="font-medium">{p.email ?? <span className="text-muted-foreground italic">No email on file</span>}</p>
-                            <p className="text-xs text-muted-foreground font-mono mt-0.5">{p.user_id.slice(0, 20)}…</p>
+                            {p.email ? (
+                              <p className="font-medium">{p.email}</p>
+                            ) : (
+                              <p className="text-muted-foreground italic text-xs">No email found</p>
+                            )}
+                            <p className="text-xs text-muted-foreground font-mono mt-0.5">{p.user_id.slice(0, 16)}…</p>
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <PlanBadge plan={p.plan_type} daysLeft={daysLeft} />
+                          <div className="space-y-1">
+                            <PlanBadge plan={p.plan_type} daysLeft={daysLeft} />
+                            <p className="text-xs text-muted-foreground hidden sm:block">
+                              Expires {formatDate(p.expiry_date)}
+                            </p>
+                          </div>
                         </td>
-                        <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">
-                          {new Date(p.expiry_date).toLocaleDateString('en-IN', {
-                            day: 'numeric', month: 'short', year: 'numeric',
-                          })}
+                        <td className="px-4 py-3 hidden lg:table-cell">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Tag className="h-3 w-3 text-blue-500" />
+                              <span className="font-semibold text-gray-700">{p.sku_count ?? 0}</span>
+                              <span>SKUs</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Package className="h-3 w-3 text-green-500" />
+                              <span className="font-semibold text-gray-700">{p.picklist_count ?? 0}</span>
+                              <span>items</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 hidden md:table-cell">
+                          <div className="text-xs text-muted-foreground space-y-0.5">
+                            <p>Joined: <span className="text-gray-700">{formatDate(p.created_at)}</span></p>
+                            <p>Last seen: <span className="text-gray-700">{formatDate(p.last_sign_in_at)}</span></p>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-right">
                           {isActing ? (
@@ -225,15 +261,17 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      <Card className="border-amber-200 bg-amber-50">
-        <CardContent className="p-4 flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-800">
-            <p className="font-semibold">Want to see user emails?</p>
-            <p className="mt-0.5">Emails appear automatically once a user submits a payment request. You can also add a <code className="bg-amber-100 px-1 rounded">email</code> column to the <code className="bg-amber-100 px-1 rounded">users_plan</code> table and store it during sign-up.</p>
-          </div>
-        </CardContent>
-      </Card>
+      {filtered.some(p => !p.email) && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4 flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800">
+              <p className="font-semibold">Kuch users ka email nahi mila</p>
+              <p className="mt-0.5">Ye users Supabase Auth mein registered nahi hain ya unka account delete ho chuka hai.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

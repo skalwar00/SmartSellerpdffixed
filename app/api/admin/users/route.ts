@@ -12,17 +12,47 @@ export async function GET() {
 
   const admin = createAdminClient()
 
-  const [{ data: plans }, { data: payments }] = await Promise.all([
+  const [
+    { data: plans },
+    { data: skuMappings },
+    { data: picklistItems },
+    authUsersResult,
+  ] = await Promise.all([
     admin.from('users_plan').select('*').order('expiry_date', { ascending: false }),
-    admin.from('payment_requests').select('user_id, email'),
+    admin.from('sku_mapping').select('user_id'),
+    admin.from('picklist_items').select('user_id'),
+    admin.auth.admin.listUsers({ perPage: 1000 }),
   ])
 
-  const emailMap: Record<string, string> = {}
-  payments?.forEach((p) => {
-    if (p.user_id && p.email && !emailMap[p.user_id]) emailMap[p.user_id] = p.email
+  const authEmailMap: Record<string, string> = {}
+  const authCreatedMap: Record<string, string> = {}
+  const authLastSignInMap: Record<string, string> = {}
+  if (authUsersResult.data?.users) {
+    for (const u of authUsersResult.data.users) {
+      if (u.email) authEmailMap[u.id] = u.email
+      authCreatedMap[u.id] = u.created_at
+      if (u.last_sign_in_at) authLastSignInMap[u.id] = u.last_sign_in_at
+    }
+  }
+
+  const skuCountMap: Record<string, number> = {}
+  skuMappings?.forEach((r) => {
+    skuCountMap[r.user_id] = (skuCountMap[r.user_id] ?? 0) + 1
   })
 
-  const result = (plans ?? []).map((p) => ({ ...p, email: emailMap[p.user_id] ?? null }))
+  const picklistCountMap: Record<string, number> = {}
+  picklistItems?.forEach((r) => {
+    picklistCountMap[r.user_id] = (picklistCountMap[r.user_id] ?? 0) + 1
+  })
+
+  const result = (plans ?? []).map((p) => ({
+    ...p,
+    email: authEmailMap[p.user_id] ?? null,
+    created_at: authCreatedMap[p.user_id] ?? null,
+    last_sign_in_at: authLastSignInMap[p.user_id] ?? null,
+    sku_count: skuCountMap[p.user_id] ?? 0,
+    picklist_count: picklistCountMap[p.user_id] ?? 0,
+  }))
 
   return NextResponse.json(result)
 }

@@ -682,6 +682,17 @@ export default function PackerPage({
   const [showCelebration, setShowCelebration] = useState(false)
   const celebratedRef = useRef(false)
 
+  const openImageWithLog = useCallback((item: PicklistItem) => {
+    setImageItem(item)
+    if (item.image_url) {
+      fetch('/api/picklist/image-view', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ short_user_id, master_sku: item.master_sku }),
+      }).catch(() => {})
+    }
+  }, [short_user_id])
+
   const toggleSelectSku = (sku: string) => {
     setSelectedSkus(prev => {
       const next = new Set(prev)
@@ -1050,7 +1061,7 @@ export default function PackerPage({
                 onOpenQtyModal={setQtyModalItem}
                 isSelected={selectedSkus.has(item.master_sku)}
                 onToggleSelect={toggleSelectSku}
-                onOpenImage={setImageItem}
+                onOpenImage={openImageWithLog}
               />
             ))}
             {done.length > 0 && (
@@ -1079,7 +1090,7 @@ export default function PackerPage({
                     onOpenQtyModal={setQtyModalItem}
                     isSelected={selectedSkus.has(item.master_sku)}
                     onToggleSelect={toggleSelectSku}
-                    onOpenImage={setImageItem}
+                    onOpenImage={openImageWithLog}
                   />
                 ))}
               </>

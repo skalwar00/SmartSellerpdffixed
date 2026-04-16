@@ -269,13 +269,34 @@ export default function PicklistPage() {
     }
   }, [])
 
-  // Initialize label unmapped rows from user metadata
+  // Initialize label unmapped rows from user metadata.
+  // Also auto-cleans SKUs that have since been mapped via any other method —
+  // removes them from both local state and user metadata silently.
   useEffect(() => {
-    if (!data?.pendingUnmappedSkus) return
-    setLabelUnmappedRows(
-      data.pendingUnmappedSkus.map(sku => ({ portalSku: sku, masterSku: '' }))
+    if (!data) return
+    const { pendingUnmappedSkus, mappingDict, comboMappings } = data
+    if (!pendingUnmappedSkus?.length) {
+      setLabelUnmappedRows([])
+      return
+    }
+
+    const stillUnmapped = pendingUnmappedSkus.filter(
+      sku => !mappingDict[sku.toUpperCase()] && !comboMappings[sku] && !comboMappings[sku.toUpperCase()]
     )
-  }, [data?.pendingUnmappedSkus?.join(',')])
+
+    setLabelUnmappedRows(stillUnmapped.map(sku => ({ portalSku: sku, masterSku: '' })))
+
+    // If some SKUs got mapped elsewhere, silently clean them from metadata
+    if (stillUnmapped.length < pendingUnmappedSkus.length) {
+      const supabase = createClient()
+      supabase.auth.updateUser({ data: { pending_unmapped_skus: stillUnmapped } })
+        .then(() => mutate('user-data'))
+    }
+  }, [
+    data?.pendingUnmappedSkus?.join(','),
+    Object.keys(data?.mappingDict ?? {}).sort().join(','),
+    Object.keys(data?.comboMappings ?? {}).sort().join(','),
+  ])
 
   const addLabelComboSku = (idx: number) => {
     setLabelUnmappedRows(prev => prev.map((r, i) => {
@@ -368,6 +389,16 @@ export default function PicklistPage() {
     }
     setup()
   }, [data?.userId, fetchLiveItems])
+
+  // Session activity ping — every 5 minutes to track dashboard open time
+  useEffect(() => {
+    if (!data?.userId) return
+    fetch('/api/activity/session', { method: 'POST' }).catch(() => {})
+    const pingInterval = setInterval(() => {
+      fetch('/api/activity/session', { method: 'POST' }).catch(() => {})
+    }, 5 * 60 * 1000)
+    return () => clearInterval(pingInterval)
+  }, [data?.userId])
 
   // Auto-sync: Supabase Realtime + 15s polling fallback
   useEffect(() => {
