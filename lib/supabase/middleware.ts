@@ -1,11 +1,14 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// If total cookie size exceeds this, clear auth cookies to prevent Vercel 494 errors
-const MAX_COOKIE_HEADER_SIZE = 7000
+// If Supabase auth cookie size exceeds this, clear auth cookies to prevent Vercel 494 errors.
+// Vercel's hard limit is ~16KB for total request headers. We only measure sb- cookies
+// because those are the ones that grow large (JWT tokens) and cause 494s.
+const MAX_AUTH_COOKIE_SIZE = 12000
 
-function getTotalCookieSize(request: NextRequest): number {
+function getAuthCookieSize(request: NextRequest): number {
   return request.cookies.getAll().reduce((total, { name, value }) => {
+    if (!name.startsWith('sb-')) return total
     return total + name.length + value.length + 2
   }, 0)
 }
@@ -22,8 +25,8 @@ export async function updateSession(request: NextRequest) {
   // Guard against bloated cookies causing Vercel 494 (REQUEST_HEADER_TOO_LARGE).
   // If cookies are already oversized, clear auth cookies and redirect to login so
   // the user can establish a fresh, correctly-sized session.
-  const cookieSize = getTotalCookieSize(request)
-  if (cookieSize > MAX_COOKIE_HEADER_SIZE) {
+  const cookieSize = getAuthCookieSize(request)
+  if (cookieSize > MAX_AUTH_COOKIE_SIZE) {
     const clearResponse = NextResponse.redirect(new URL('/auth/login', request.url))
     clearAuthCookies(clearResponse, request)
     return clearResponse

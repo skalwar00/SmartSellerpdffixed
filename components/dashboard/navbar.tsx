@@ -28,8 +28,7 @@ import {
 
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import { PinDialog } from '@/components/dashboard/pin-dialog'
-
-const BOOK_DEMO_URL = 'https://wa.me/your-number-here'
+import { DemoRequestModal } from '@/components/demo-request-modal'
 
 interface PlanData {
   id: string
@@ -57,6 +56,7 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
   const [mounted, setMounted] = useState(false)
   const [daysLeft, setDaysLeft] = useState(0)
   const [pinOpen, setPinOpen] = useState(false)
+  const [demoOpen, setDemoOpen] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -107,15 +107,13 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
                 </Link>
               )
             })}
-            <a
-              href={BOOK_DEMO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={() => setDemoOpen(true)}
               className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-all duration-200"
             >
               <CalendarDays className="h-4 w-4" />
               Book Demo
-            </a>
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -213,19 +211,18 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
             <Lock className="h-3.5 w-3.5" />
             Costing
           </button>
-          <a
-            href={BOOK_DEMO_URL}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => setDemoOpen(true)}
             className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-all duration-200"
           >
             <CalendarDays className="h-3.5 w-3.5" />
             Book Demo
-          </a>
+          </button>
         </div>
       </nav>
 
       <PinDialog open={pinOpen} onClose={() => setPinOpen(false)} />
+      <DemoRequestModal open={demoOpen} onClose={() => setDemoOpen(false)} />
     </>
   )
 }

@@ -14,7 +14,6 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { BarChart3 } from "lucide-react";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -68,9 +67,11 @@ export default function SignUpPage() {
       <div className="w-full max-w-sm">
         <div className="flex flex-col gap-6">
           <div className="flex items-center justify-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500">
-              <BarChart3 className="h-5 w-5 text-white" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="SSP Logo"
+              className="h-11 w-11 object-contain"
+            />
             <span className="text-xl font-bold">SmartSellerPick</span>
           </div>
           <Card>

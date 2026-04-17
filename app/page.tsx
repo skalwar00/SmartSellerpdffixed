@@ -3,8 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-
-const BOOK_DEMO_URL = 'https://wa.me/your-number-here'
+import { BookDemoButton } from '@/components/book-demo-button'
 
 export default async function LandingPage() {
   try {
@@ -40,12 +39,9 @@ export default async function LandingPage() {
             <Link href="#how-it-works" className="text-sm text-muted-foreground transition-colors hover:text-foreground">How it works</Link>
             <Link href="#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Features</Link>
             <Link href="#pricing" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Pricing</Link>
-            <Link href={BOOK_DEMO_URL} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 transition-colors hover:text-blue-700">Book Demo</Link>
           </nav>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" asChild className="hidden sm:flex border-blue-500 text-blue-600 hover:bg-blue-50">
-              <Link href={BOOK_DEMO_URL} target="_blank" rel="noopener noreferrer">Book Demo</Link>
-            </Button>
+            <BookDemoButton variant="outline" size="sm" className="hidden sm:flex border-blue-500 text-blue-600 hover:bg-blue-50" />
             <Button variant="ghost" size="sm" asChild><Link href="/auth/login">Log in</Link></Button>
             <Button size="sm" asChild>
               <Link href="/auth/sign-up">
