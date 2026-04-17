@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { migrateUserMetadata } from '@/lib/supabase/migrate-user-metadata'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
       const { data: { user } } = await supabase.auth.getUser()
 
       if (user) {
+        // Provision trial plan for brand-new users
         const { data: existing } = await supabase
           .from('users_plan')
           .select('user_id')
@@ -44,6 +46,10 @@ export async function GET(request: NextRequest) {
             is_combo_enabled: false,
           })
         }
+
+        // Strip any large legacy fields from the JWT right away so the
+        // session cookie never grows large enough to trigger HTTP 431.
+        await migrateUserMetadata(supabase, user.id, user.user_metadata ?? {})
       }
 
       return NextResponse.redirect(`${origin}/dashboard`)
@@ -55,6 +61,10 @@ export async function GET(request: NextRequest) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await migrateUserMetadata(supabase, user.id, user.user_metadata ?? {})
+      }
       return NextResponse.redirect(`${origin}/dashboard`)
     }
   }

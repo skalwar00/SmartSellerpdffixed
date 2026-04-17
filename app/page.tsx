@@ -25,6 +25,16 @@ export default async function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
 
+      {/* ── Mobile floating Book Demo button ── */}
+      <div className="fixed right-0 top-1/2 -translate-y-1/2 z-50 sm:hidden">
+        <BookDemoButton
+          variant="default"
+          size="sm"
+          label="Book Demo"
+          className="rounded-l-xl rounded-r-none shadow-lg bg-blue-600 hover:bg-blue-700 text-white px-3 py-5 text-xs font-semibold [writing-mode:vertical-rl] rotate-180 h-auto"
+        />
+      </div>
+
       {/* ── Navigation ── */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">

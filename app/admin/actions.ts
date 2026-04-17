@@ -92,3 +92,30 @@ export async function rejectPayment(paymentId: string, notes: string) {
   revalidatePath('/admin/payments')
   revalidatePath('/admin')
 }
+
+export async function markDemoDone(id: string) {
+  const supabase = createAdminClient()
+  await supabase
+    .from('demo_requests')
+    .update({ status: 'done' })
+    .eq('id', id)
+  revalidatePath('/admin/demo-requests')
+}
+
+export async function markDemoPending(id: string) {
+  const supabase = createAdminClient()
+  await supabase
+    .from('demo_requests')
+    .update({ status: 'pending' })
+    .eq('id', id)
+  revalidatePath('/admin/demo-requests')
+}
+
+export async function deleteDemoRequest(id: string) {
+  const supabase = createAdminClient()
+  await supabase
+    .from('demo_requests')
+    .delete()
+    .eq('id', id)
+  revalidatePath('/admin/demo-requests')
+}

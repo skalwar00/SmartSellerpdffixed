@@ -21,71 +21,94 @@ function clearAuthCookies(response: NextResponse, request: NextRequest) {
   })
 }
 
+/**
+ * Filter out any sb- cookies whose values are truncated / invalid JSON.
+ * The Supabase library calls JSON.parse internally on cookie values — if a
+ * cookie is corrupted it throws a SyntaxError that can bypass our try/catch
+ * and crash the page with a 500. Stripping them here means Supabase never
+ * sees bad data in the first place.
+ */
+function getSanitisedCookies(request: NextRequest) {
+  return request.cookies.getAll().filter(({ name, value }) => {
+    if (!name.startsWith('sb-')) return true
+    const trimmed = value.trimStart()
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return true
+    try {
+      JSON.parse(value)
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
-  // Guard against bloated cookies causing Vercel 494 (REQUEST_HEADER_TOO_LARGE).
-  // Only check on non-auth pages — if we also clear on /auth/login, the user
-  // gets trapped in an infinite loop (login → cookies cleared → login → ...) which
-  // eventually triggers Supabase's email rate limiter and locks them out entirely.
-  const isAuthPage = pathname.startsWith('/auth')
-  if (!isAuthPage) {
-    const cookieSize = getAuthCookieSize(request)
-    if (cookieSize > MAX_AUTH_COOKIE_SIZE) {
+  try {
+    // Guard against bloated cookies causing HTTP 431 (REQUEST_HEADER_TOO_LARGE).
+    // Only check on non-auth pages — if we also clear on /auth/login, the user
+    // gets trapped in an infinite loop (login → cookies cleared → login → ...)
+    // which eventually triggers Supabase's email rate limiter.
+    const isAuthPage = pathname.startsWith('/auth')
+    if (!isAuthPage) {
+      const cookieSize = getAuthCookieSize(request)
+      if (cookieSize > MAX_AUTH_COOKIE_SIZE) {
+        const clearResponse = NextResponse.redirect(new URL('/auth/login', request.url))
+        clearAuthCookies(clearResponse, request)
+        return clearResponse
+      }
+    }
+
+    let supabaseResponse = NextResponse.next({ request })
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            // Use sanitised cookies so the Supabase library never receives
+            // truncated JSON — prevents SyntaxError 500s on the login page.
+            return getSanitisedCookies(request)
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) =>
+              request.cookies.set(name, value),
+            )
+            supabaseResponse = NextResponse.next({ request })
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, options),
+            )
+          },
+        },
+      },
+    )
+
+    // Read the session directly from cookies — no network call needed.
+    let session = null
+    try {
+      const { data } = await supabase.auth.getSession()
+      session = data.session
+    } catch {
+      // Remaining corrupted cookie that slipped through — clear and redirect.
       const clearResponse = NextResponse.redirect(new URL('/auth/login', request.url))
       clearAuthCookies(clearResponse, request)
       return clearResponse
     }
-  }
 
-  let supabaseResponse = NextResponse.next({
-    request,
-  })
+    // Redirect unauthenticated users away from protected routes
+    if (!session && pathname.startsWith('/dashboard')) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/auth/login'
+      return NextResponse.redirect(url)
+    }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value),
-          )
-          supabaseResponse = NextResponse.next({
-            request,
-          })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options),
-          )
-        },
-      },
-    },
-  )
-
-  // Read the session directly from cookies — no network call needed.
-  let session = null
-  try {
-    const { data } = await supabase.auth.getSession()
-    session = data.session
+    return supabaseResponse
   } catch {
-    // Session cookie is corrupted — clear and redirect to login
-    const clearResponse = NextResponse.redirect(new URL('/auth/login', request.url))
-    clearAuthCookies(clearResponse, request)
-    return clearResponse
+    // Safety net — never let a middleware crash bubble up as a 500.
+    const fallback = NextResponse.next({ request })
+    clearAuthCookies(fallback, request)
+    return fallback
   }
-
-  // Redirect unauthenticated users away from protected routes
-  if (
-    !session &&
-    pathname.startsWith('/dashboard')
-  ) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/auth/login'
-    return NextResponse.redirect(url)
-  }
-
-  return supabaseResponse
 }

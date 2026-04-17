@@ -2,6 +2,7 @@
 
 import { useState, useCallback, Fragment, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { migrateUserMetadata } from '@/lib/supabase/migrate-user-metadata'
 import { DashboardHeader } from '@/components/dashboard/sidebar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -221,43 +222,25 @@ async function fetchUserData() {
     }
   })
 
-  // One-time migration: move legacy combo_mappings from JWT user_metadata to DB
+  // One-time migration: strip large legacy fields from JWT and move to DB.
+  // Runs here as a fallback for email/password users (who bypass the auth
+  // callback). Fire-and-forget — dashboard render is not blocked on it.
   const legacyCombo = (user.user_metadata?.combo_mappings as Record<string, string[]>) || {}
-  if (Object.keys(legacyCombo).length > 0) {
-    try {
-      await Promise.all(
-        Object.entries(legacyCombo).map(([portalSku, skus]) => {
-          const extraSkus = skus.slice(1).filter(Boolean)
-          if (extraSkus.length > 0) {
-            return supabase.from('sku_mapping')
-              .update({ combo_skus: extraSkus })
-              .eq('user_id', user.id)
-              .eq('portal_sku', portalSku)
-          }
-          return Promise.resolve()
-        })
-      )
-      await supabase.auth.updateUser({ data: { combo_mappings: null } })
-      Object.entries(legacyCombo).forEach(([portalSku, skus]) => {
-        if (!comboMappings[portalSku] && skus.length > 0) {
-          comboMappings[portalSku] = skus
-        }
-      })
-    } catch { /* migration failed — not critical */ }
+  const legacyPending = (user.user_metadata?.pending_unmapped_skus as string[]) || []
+  if (Object.keys(legacyCombo).length > 0 || legacyPending.length > 0) {
+    migrateUserMetadata(supabase, user.id, user.user_metadata ?? {}).catch(() => {})
+    // Merge legacy combo data into the local mapping for this render
+    Object.entries(legacyCombo).forEach(([portalSku, skus]) => {
+      if (!comboMappings[portalSku] && skus.length > 0) {
+        comboMappings[portalSku] = skus
+      }
+    })
   }
 
-  // One-time migration: move legacy pending_unmapped_skus from JWT to DB
-  const legacyPending = (user.user_metadata?.pending_unmapped_skus as string[]) || []
   const dbPending = (planRes.data?.pending_unmapped_skus as string[]) || []
-  let pendingUnmappedSkus: string[] = dbPending
-  if (legacyPending.length > 0) {
-    try {
-      const merged = [...new Set([...dbPending, ...legacyPending])]
-      await supabase.from('users_plan').update({ pending_unmapped_skus: merged }).eq('user_id', user.id)
-      await supabase.auth.updateUser({ data: { pending_unmapped_skus: null } })
-      pendingUnmappedSkus = merged
-    } catch { pendingUnmappedSkus = dbPending.length > 0 ? dbPending : legacyPending }
-  }
+  const pendingUnmappedSkus: string[] = dbPending.length > 0
+    ? dbPending
+    : legacyPending
 
   const masterOptions = inventoryRes.data?.map(i => i.master_sku.toUpperCase()) || []
   const isComboEnabled = (user.user_metadata?.is_combo_enabled as boolean) ?? false
