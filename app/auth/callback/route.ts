@@ -18,6 +18,11 @@ export async function GET(request: NextRequest) {
     })
 
     if (!error) {
+      // Password reset flow — send user to set-new-password page
+      if (type === 'recovery') {
+        return NextResponse.redirect(`${origin}/auth/reset-password`)
+      }
+
       const { data: { user } } = await supabase.auth.getUser()
 
       if (user) {

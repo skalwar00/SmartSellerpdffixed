@@ -46,24 +46,25 @@ export async function POST(req: NextRequest) {
   if (pushItems.length === 0 && portalItems && portalItems.length > 0) {
     const { data: mappings } = await supabase
       .from('sku_mapping')
-      .select('portal_sku, master_sku')
+      .select('portal_sku, master_sku, combo_skus')
       .eq('user_id', user.id)
 
     const mappingDict: Record<string, string> = {}
+    const comboSkusDict: Record<string, string[]> = {}
     mappings?.forEach((item) => {
-      mappingDict[normalizeSku(item.portal_sku)] = normalizeSku(item.master_sku)
+      const key = normalizeSku(item.portal_sku)
+      mappingDict[key] = normalizeSku(item.master_sku)
+      if (item.combo_skus && item.combo_skus.length > 0) {
+        comboSkusDict[key] = item.combo_skus
+      }
     })
 
-    const comboMappings = (user.user_metadata?.combo_mappings as Record<string, string[]>) || {}
     const mappedItems = portalItems.flatMap((item) => {
       const portalSku = normalizeSku(item.portal_sku)
       const qty = Number(item.qty) || 0
       if (!portalSku || qty <= 0) return []
 
-      const comboSkus =
-        comboMappings[item.portal_sku] ||
-        comboMappings[portalSku] ||
-        comboMappings[item.portal_sku.toLowerCase()]
+      const comboSkus = comboSkusDict[portalSku]
 
       if (comboSkus && comboSkus.length > 0) {
         return comboSkus
@@ -85,9 +86,17 @@ export async function POST(req: NextRequest) {
     unmappedSkus.push(...unmappedSkuSet)
 
     if (unmappedSkus.length > 0) {
-      const existingUnmapped = (user.user_metadata?.pending_unmapped_skus as string[]) || []
+      const { data: planRow } = await supabase
+        .from('users_plan')
+        .select('pending_unmapped_skus')
+        .eq('user_id', user.id)
+        .single()
+      const existingUnmapped = (planRow?.pending_unmapped_skus as string[]) || []
       const merged = Array.from(new Set([...existingUnmapped, ...unmappedSkus]))
-      await supabase.auth.updateUser({ data: { pending_unmapped_skus: merged } })
+      await supabase
+        .from('users_plan')
+        .update({ pending_unmapped_skus: merged })
+        .eq('user_id', user.id)
     }
   }
 

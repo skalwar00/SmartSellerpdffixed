@@ -178,22 +178,89 @@ function simpleRatio(s1: string, s2: string): number {
   return Math.round(((longer.length - distance) / longer.length) * 100)
 }
 
+type SkuMappingRecord = {
+  user_id: string
+  portal_sku: string
+  master_sku: string
+  combo_skus?: string[]
+}
+
+async function upsertSkuMappings(
+  supabase: ReturnType<typeof createClient>,
+  records: SkuMappingRecord[]
+) {
+  const { error } = await supabase.from('sku_mapping').upsert(records, { onConflict: 'user_id, portal_sku' })
+  if (error) {
+    // If combo_skus column doesn't exist yet (migration pending), fall back without it
+    const fallback = records.map(({ combo_skus: _cs, ...r }) => r)
+    const { error: fallbackError } = await supabase.from('sku_mapping').upsert(fallback, { onConflict: 'user_id, portal_sku' })
+    if (fallbackError) throw fallbackError
+  }
+}
+
 async function fetchUserData() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
-  const [mappingRes, inventoryRes] = await Promise.all([
+  // Try fetching with combo_skus column; fall back gracefully if migration hasn't run yet
+  const [mappingResWithCombo, mappingResBase, inventoryRes, planRes] = await Promise.all([
+    supabase.from('sku_mapping').select('portal_sku, master_sku, combo_skus').eq('user_id', user.id),
     supabase.from('sku_mapping').select('portal_sku, master_sku').eq('user_id', user.id),
     supabase.from('master_inventory').select('master_sku').eq('user_id', user.id),
+    supabase.from('users_plan').select('pending_unmapped_skus').eq('user_id', user.id).maybeSingle(),
   ])
+  const mappingRes = mappingResWithCombo.error ? mappingResBase : mappingResWithCombo
+
   const mappingDict: Record<string, string> = {}
+  const comboMappings: Record<string, string[]> = {}
   mappingRes.data?.forEach(item => {
     mappingDict[item.portal_sku.toUpperCase()] = item.master_sku
+    const comboSkus = (item.combo_skus as string[]) || []
+    if (comboSkus.length > 0) {
+      comboMappings[item.portal_sku] = [item.master_sku, ...comboSkus]
+    }
   })
+
+  // One-time migration: move legacy combo_mappings from JWT user_metadata to DB
+  const legacyCombo = (user.user_metadata?.combo_mappings as Record<string, string[]>) || {}
+  if (Object.keys(legacyCombo).length > 0) {
+    try {
+      await Promise.all(
+        Object.entries(legacyCombo).map(([portalSku, skus]) => {
+          const extraSkus = skus.slice(1).filter(Boolean)
+          if (extraSkus.length > 0) {
+            return supabase.from('sku_mapping')
+              .update({ combo_skus: extraSkus })
+              .eq('user_id', user.id)
+              .eq('portal_sku', portalSku)
+          }
+          return Promise.resolve()
+        })
+      )
+      await supabase.auth.updateUser({ data: { combo_mappings: null } })
+      Object.entries(legacyCombo).forEach(([portalSku, skus]) => {
+        if (!comboMappings[portalSku] && skus.length > 0) {
+          comboMappings[portalSku] = skus
+        }
+      })
+    } catch { /* migration failed — not critical */ }
+  }
+
+  // One-time migration: move legacy pending_unmapped_skus from JWT to DB
+  const legacyPending = (user.user_metadata?.pending_unmapped_skus as string[]) || []
+  const dbPending = (planRes.data?.pending_unmapped_skus as string[]) || []
+  let pendingUnmappedSkus: string[] = dbPending
+  if (legacyPending.length > 0) {
+    try {
+      const merged = [...new Set([...dbPending, ...legacyPending])]
+      await supabase.from('users_plan').update({ pending_unmapped_skus: merged }).eq('user_id', user.id)
+      await supabase.auth.updateUser({ data: { pending_unmapped_skus: null } })
+      pendingUnmappedSkus = merged
+    } catch { pendingUnmappedSkus = dbPending.length > 0 ? dbPending : legacyPending }
+  }
+
   const masterOptions = inventoryRes.data?.map(i => i.master_sku.toUpperCase()) || []
   const isComboEnabled = (user.user_metadata?.is_combo_enabled as boolean) ?? false
-  const comboMappings = (user.user_metadata?.combo_mappings as Record<string, string[]>) || {}
-  const pendingUnmappedSkus = (user.user_metadata?.pending_unmapped_skus as string[]) || []
   return { mappingDict, masterOptions, userId: user.id, isComboEnabled, comboMappings, pendingUnmappedSkus }
 }
 
@@ -286,10 +353,12 @@ export default function PicklistPage() {
 
     setLabelUnmappedRows(stillUnmapped.map(sku => ({ portalSku: sku, masterSku: '' })))
 
-    // If some SKUs got mapped elsewhere, silently clean them from metadata
+    // If some SKUs got mapped elsewhere, silently clean them from DB
     if (stillUnmapped.length < pendingUnmappedSkus.length) {
       const supabase = createClient()
-      supabase.auth.updateUser({ data: { pending_unmapped_skus: stillUnmapped } })
+      supabase.from('users_plan')
+        .update({ pending_unmapped_skus: stillUnmapped })
+        .eq('user_id', data.userId)
         .then(() => mutate('user-data'))
     }
   }, [
@@ -336,32 +405,18 @@ export default function PicklistPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      const comboRows = toSave.filter(r => (r.comboSkus || []).filter(Boolean).length > 0)
-      if (comboRows.length > 0) {
-        const existingCombo = (user.user_metadata?.combo_mappings as Record<string, string[]>) || {}
-        const updatedCombo = {
-          ...existingCombo,
-          ...Object.fromEntries(
-            comboRows.map(r => [
-              r.portalSku,
-              [r.masterSku, ...(r.comboSkus || []).filter(Boolean)],
-            ])
-          ),
-        }
-        await supabase.auth.updateUser({ data: { combo_mappings: updatedCombo } })
-      }
-
-      const records = toSave.map(r => ({
+      const records: SkuMappingRecord[] = toSave.map(r => ({
         user_id: user.id,
         portal_sku: r.portalSku,
         master_sku: r.masterSku.trim().toUpperCase(),
+        combo_skus: (r.comboSkus || []).filter(Boolean),
       }))
-      const { error } = await supabase.from('sku_mapping').upsert(records, { onConflict: 'user_id, portal_sku' })
-      if (error) throw error
+      await upsertSkuMappings(supabase, records)
 
       const savedPortalSkus = new Set(toSave.map(r => r.portalSku))
       const remaining = (data?.pendingUnmappedSkus || []).filter(s => !savedPortalSkus.has(s))
-      await supabase.auth.updateUser({ data: { pending_unmapped_skus: remaining } })
+      const { error: pendingError } = await supabase.from('users_plan').update({ pending_unmapped_skus: remaining }).eq('user_id', user.id)
+      if (pendingError) { /* column may not exist yet — non-critical */ }
 
       toast.success(`${toSave.length} SKU mapping${toSave.length > 1 ? 's' : ''} save ho gayi`)
       setLabelUnmappedRows(remaining.map(sku => ({ portalSku: sku, masterSku: '' })))
@@ -694,29 +749,13 @@ export default function PicklistPage() {
     try {
       const supabase = createClient()
 
-      const comboRows = toSave.filter(row => (row.comboSkus || []).filter(Boolean).length > 0)
-      if (comboRows.length > 0) {
-        const { data: { user } } = await supabase.auth.getUser()
-        const existingCombo = (user?.user_metadata?.combo_mappings as Record<string, string[]>) || {}
-        const updatedCombo = {
-          ...existingCombo,
-          ...Object.fromEntries(
-            comboRows.map(row => [
-              row.portalSku,
-              [row.masterSku, ...(row.comboSkus || []).filter(Boolean)],
-            ])
-          ),
-        }
-        await supabase.auth.updateUser({ data: { combo_mappings: updatedCombo } })
-      }
-
-      const records = toSave.map(row => ({
+      const records: SkuMappingRecord[] = toSave.map(row => ({
         user_id: data.userId,
         portal_sku: row.portalSku,
         master_sku: row.masterSku,
+        combo_skus: (row.comboSkus || []).filter(Boolean),
       }))
-      const { error } = await supabase.from('sku_mapping').upsert(records, { onConflict: 'user_id, portal_sku' })
-      if (error) throw error
+      await upsertSkuMappings(supabase, records)
       mutate('user-data')
     } catch (err) {
       setOrders(prevOrders)
@@ -734,29 +773,16 @@ export default function PicklistPage() {
     setIsLoadingMappings(true)
     try {
       const supabase = createClient()
-      const [{ data: rows, error }, { data: userRes }] = await Promise.all([
-        supabase
-          .from('sku_mapping')
-          .select('portal_sku, master_sku')
-          .order('portal_sku', { ascending: true }),
-        supabase.auth.getUser(),
-      ])
+      const { data: rows, error } = await supabase
+        .from('sku_mapping')
+        .select('portal_sku, master_sku, combo_skus')
+        .order('portal_sku', { ascending: true })
       if (error) throw error
-      const comboMappings = (userRes.user?.user_metadata?.combo_mappings as Record<string, string[]>) || {}
-      setAllMappings((rows || []).map(r => {
-        const comboValue =
-          comboMappings[r.portal_sku] ||
-          comboMappings[r.portal_sku.toUpperCase()] ||
-          comboMappings[r.portal_sku.toLowerCase()] ||
-          []
-        return {
-          portalSku: r.portal_sku,
-          masterSku: r.master_sku,
-          comboSkus: comboValue
-            .filter(Boolean)
-            .filter(sku => sku.toUpperCase() !== r.master_sku.toUpperCase()),
-        }
-      }))
+      setAllMappings((rows || []).map(r => ({
+        portalSku: r.portal_sku,
+        masterSku: r.master_sku,
+        comboSkus: ((r.combo_skus as string[]) || []).filter(Boolean),
+      })))
       setMappingEdits({})
     } catch {
       toast.error('Failed to load mappings')
@@ -776,32 +802,18 @@ export default function PicklistPage() {
     setIsSavingEdits(true)
     try {
       const supabase = createClient()
-      const { data: userRes } = await supabase.auth.getUser()
-      const existingCombo = (userRes.user?.user_metadata?.combo_mappings as Record<string, string[]>) || {}
-      const records = Object.entries(mappingEdits).map(([portalSku, masterSku]) => ({
-        user_id: data.userId,
-        portal_sku: portalSku,
-        master_sku: masterSku,
-      }))
-      const { error } = await supabase.from('sku_mapping').upsert(records, { onConflict: 'user_id, portal_sku' })
-      if (error) throw error
-      const updatedCombo = { ...existingCombo }
-      let comboChanged = false
-      Object.entries(mappingEdits).forEach(([portalSku, masterSku]) => {
-        const comboKey =
-          updatedCombo[portalSku] ? portalSku :
-          updatedCombo[portalSku.toUpperCase()] ? portalSku.toUpperCase() :
-          updatedCombo[portalSku.toLowerCase()] ? portalSku.toLowerCase() :
-          null
-        if (!comboKey) return
-        const current = updatedCombo[comboKey].filter(Boolean)
-        const extraSkus = current.slice(1).filter(sku => sku.toUpperCase() !== masterSku.toUpperCase())
-        updatedCombo[comboKey] = [masterSku, ...extraSkus]
-        comboChanged = true
+      const records: SkuMappingRecord[] = Object.entries(mappingEdits).map(([portalSku, masterSku]) => {
+        const existingMapping = allMappings.find(m => m.portalSku === portalSku)
+        const filteredComboSkus = (existingMapping?.comboSkus || [])
+          .filter(sku => sku.toUpperCase() !== masterSku.toUpperCase())
+        return {
+          user_id: data.userId,
+          portal_sku: portalSku,
+          master_sku: masterSku,
+          combo_skus: filteredComboSkus,
+        }
       })
-      if (comboChanged) {
-        await supabase.auth.updateUser({ data: { combo_mappings: updatedCombo } })
-      }
+      await upsertSkuMappings(supabase, records)
       setAllMappings(prev => prev.map(m => mappingEdits[m.portalSku] ? { ...m, masterSku: mappingEdits[m.portalSku] } : m))
       setMappingEdits({})
       toast.success(`Saved ${records.length} mapping${records.length !== 1 ? 's' : ''}`)
@@ -818,23 +830,12 @@ export default function PicklistPage() {
     setIsDeletingMapping(portalSku)
     try {
       const supabase = createClient()
-      const [{ error }, { data: userRes }] = await Promise.all([
-        supabase
-          .from('sku_mapping')
-          .delete()
-          .eq('user_id', data.userId)
-          .eq('portal_sku', portalSku),
-        supabase.auth.getUser(),
-      ])
+      const { error } = await supabase
+        .from('sku_mapping')
+        .delete()
+        .eq('user_id', data.userId)
+        .eq('portal_sku', portalSku)
       if (error) throw error
-      const existingCombo = (userRes.user?.user_metadata?.combo_mappings as Record<string, string[]>) || {}
-      if (existingCombo[portalSku] || existingCombo[portalSku.toUpperCase()] || existingCombo[portalSku.toLowerCase()]) {
-        const updatedCombo = { ...existingCombo }
-        delete updatedCombo[portalSku]
-        delete updatedCombo[portalSku.toUpperCase()]
-        delete updatedCombo[portalSku.toLowerCase()]
-        await supabase.auth.updateUser({ data: { combo_mappings: updatedCombo } })
-      }
       setAllMappings(prev => prev.filter(m => m.portalSku !== portalSku))
       setMappingEdits(prev => { const n = { ...prev }; delete n[portalSku]; return n })
       toast.success('Mapping deleted')

@@ -1,10 +1,10 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// If Supabase auth cookie size exceeds this, clear auth cookies to prevent Vercel 494 errors.
-// Vercel's hard limit is ~16KB for total request headers. We only measure sb- cookies
-// because those are the ones that grow large (JWT tokens) and cause 494s.
-const MAX_AUTH_COOKIE_SIZE = 12000
+// Vercel's hard limit is ~16KB for total request headers.
+// We only measure sb- cookies (Supabase session JWTs) since those grow large.
+// We leave 2KB headroom for other headers.
+const MAX_AUTH_COOKIE_SIZE = 14000
 
 function getAuthCookieSize(request: NextRequest): number {
   return request.cookies.getAll().reduce((total, { name, value }) => {
@@ -22,14 +22,20 @@ function clearAuthCookies(response: NextResponse, request: NextRequest) {
 }
 
 export async function updateSession(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
   // Guard against bloated cookies causing Vercel 494 (REQUEST_HEADER_TOO_LARGE).
-  // If cookies are already oversized, clear auth cookies and redirect to login so
-  // the user can establish a fresh, correctly-sized session.
-  const cookieSize = getAuthCookieSize(request)
-  if (cookieSize > MAX_AUTH_COOKIE_SIZE) {
-    const clearResponse = NextResponse.redirect(new URL('/auth/login', request.url))
-    clearAuthCookies(clearResponse, request)
-    return clearResponse
+  // Only check on non-auth pages — if we also clear on /auth/login, the user
+  // gets trapped in an infinite loop (login → cookies cleared → login → ...) which
+  // eventually triggers Supabase's email rate limiter and locks them out entirely.
+  const isAuthPage = pathname.startsWith('/auth')
+  if (!isAuthPage) {
+    const cookieSize = getAuthCookieSize(request)
+    if (cookieSize > MAX_AUTH_COOKIE_SIZE) {
+      const clearResponse = NextResponse.redirect(new URL('/auth/login', request.url))
+      clearAuthCookies(clearResponse, request)
+      return clearResponse
+    }
   }
 
   let supabaseResponse = NextResponse.next({
@@ -59,8 +65,7 @@ export async function updateSession(request: NextRequest) {
     },
   )
 
-  // Use getSession() to read the session directly from cookies — no network call,
-  // so auth checks are fast and reliable even if Supabase is momentarily unreachable.
+  // Read the session directly from cookies — no network call needed.
   let session = null
   try {
     const { data } = await supabase.auth.getSession()
@@ -75,7 +80,7 @@ export async function updateSession(request: NextRequest) {
   // Redirect unauthenticated users away from protected routes
   if (
     !session &&
-    request.nextUrl.pathname.startsWith('/dashboard')
+    pathname.startsWith('/dashboard')
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
