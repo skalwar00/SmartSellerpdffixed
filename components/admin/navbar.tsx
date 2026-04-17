@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Shield, Users, CreditCard, LayoutDashboard, ArrowLeft, Activity, CalendarCheck } from 'lucide-react'
+import { Shield, Users, CreditCard, LayoutDashboard, ArrowLeft, Activity, CalendarCheck, Handshake } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +12,7 @@ const navLinks = [
   { href: '/admin/payments', label: 'Payments', icon: CreditCard, exact: false },
   { href: '/admin/activity', label: 'Activity', icon: Activity, exact: false },
   { href: '/admin/demo-requests', label: 'Demo Requests', icon: CalendarCheck, exact: false },
+  { href: '/admin/partners', label: 'Partners', icon: Handshake, exact: false },
 ]
 
 export function AdminNavbar({ adminEmail }: { adminEmail: string }) {

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { migrateUserMetadata } from '@/lib/supabase/migrate-user-metadata'
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
@@ -38,12 +39,16 @@ export async function GET(request: NextRequest) {
           const expiryDate = new Date()
           expiryDate.setDate(expiryDate.getDate() + 14)
 
+          const cookieStore = await cookies()
+          const refCode = cookieStore.get('ssp_ref')?.value ?? null
+
           await supabase.from('users_plan').insert({
             user_id: user.id,
             plan_type: 'trial',
             expiry_date: expiryDate.toISOString(),
             has_seen_onboarding: false,
             is_combo_enabled: false,
+            referred_by: refCode,
           })
         }
 

@@ -47,6 +47,20 @@ export async function GET(
     return NextResponse.json({ error: itemsErr.message }, { status: 500 })
   }
 
+  // Fetch shortage flags (non-critical — silently skip if column missing)
+  let shortageMap: Record<string, boolean> = {}
+  try {
+    const { data: shortageData, error: shortageErr } = await db
+      .from('picklist_items')
+      .select('master_sku, shortage')
+      .eq('user_id', planRow.user_id)
+    if (!shortageErr && shortageData) {
+      shortageData.forEach((row: { master_sku: string; shortage?: boolean }) => {
+        if (row.shortage) shortageMap[row.master_sku] = true
+      })
+    }
+  } catch { /* shortage column may not exist yet — run migration 008 */ }
+
   // Fetch image URLs from master_inventory (non-critical — silently skip if column missing)
   let imageMap: Record<string, string> = {}
   try {
@@ -65,6 +79,7 @@ export async function GET(
 
   const enrichedItems = (items || []).map(item => ({
     ...item,
+    shortage: shortageMap[item.master_sku] ?? false,
     image_url: imageMap[item.master_sku] ?? null,
   }))
 

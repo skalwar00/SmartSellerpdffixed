@@ -133,6 +133,8 @@ interface LiveItem {
   total_qty: number
   picked_qty: number
   status: 'pending' | 'picked' | 'updated'
+  shortage?: boolean
+  remaining_stock?: number
 }
 
 // Token Set Ratio - matches thefuzz behavior
@@ -1047,6 +1049,20 @@ export default function PicklistPage() {
     }
   }
 
+  const handleDownloadRemainingStock = () => {
+    const stockItems = liveItems.filter(i => (i.remaining_stock ?? 0) > 0)
+    if (stockItems.length === 0) { toast.error('Koi remaining stock nahi hai abhi'); return }
+    const wsData = [
+      ['Master SKU', 'Order Qty', 'Remaining Stock'],
+      ...stockItems.map(i => [i.master_sku, i.total_qty, i.remaining_stock ?? 0]),
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(wsData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Remaining Stock')
+    XLSX.writeFile(wb, `remaining-stock-${new Date().toISOString().slice(0, 10)}.xlsx`)
+    toast.success(`${stockItems.length} items ka remaining stock download ho gaya!`)
+  }
+
   const updateRow = (idx: number, changes: Partial<MappingRow>) => {
     setUnmappedRows(prev => prev.map((r, i) => i === idx ? { ...r, ...changes } : r))
   }
@@ -1111,6 +1127,9 @@ export default function PicklistPage() {
   const livePickedQty = liveItems.reduce((s, i) => s + i.picked_qty, 0)
   const livePickedItems = liveItems.filter(i => i.status === 'picked').length
   const livePct = liveTotalQty > 0 ? Math.round((livePickedQty / liveTotalQty) * 100) : 0
+  const shortageItems = liveItems.filter(i => i.shortage)
+  const remainingStockItems = liveItems.filter(i => (i.remaining_stock ?? 0) > 0)
+  const totalRemainingStock = remainingStockItems.reduce((s, i) => s + (i.remaining_stock ?? 0), 0)
 
   return (
     <>
@@ -1174,6 +1193,17 @@ export default function PicklistPage() {
                       {isGenerating ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Download className="h-3.5 w-3.5 mr-1.5" />}
                       PDF from DB
                     </Button>
+                    {remainingStockItems.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-green-200 text-green-700 hover:bg-green-50"
+                        onClick={handleDownloadRemainingStock}
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
+                        Remaining Stock
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -1217,18 +1247,79 @@ export default function PicklistPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="grid grid-cols-4 gap-2 text-center">
                 {[
                   { label: 'Pending', count: liveItems.filter(i => i.status === 'pending').length, color: 'text-gray-600' },
                   { label: 'Updated', count: liveItems.filter(i => i.status === 'updated').length, color: 'text-orange-600' },
                   { label: 'Picked', count: livePickedItems, color: 'text-green-600' },
+                  { label: 'Shortage', count: shortageItems.length, color: 'text-red-600' },
                 ].map(({ label, count, color }) => (
-                  <div key={label} className="rounded-lg bg-background border p-2">
+                  <div key={label} className={`rounded-lg bg-background border p-2 ${label === 'Shortage' && count > 0 ? 'border-red-200 bg-red-50' : ''}`}>
                     <p className={`text-lg font-bold ${color}`}>{count}</p>
                     <p className="text-xs text-muted-foreground">{label}</p>
                   </div>
                 ))}
               </div>
+
+              {/* Shortage Items Panel */}
+              {shortageItems.length > 0 && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="text-sm font-semibold text-red-700 mb-2 flex items-center gap-1.5">
+                    ⚠️ Shortage Reported by Packer
+                  </p>
+                  <div className="space-y-1.5">
+                    {shortageItems.map(item => (
+                      <div key={item.master_sku} className="flex items-center justify-between rounded-md bg-white border border-red-100 px-3 py-2">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{item.master_sku}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Picked {item.picked_qty} of {item.total_qty} units
+                          </p>
+                        </div>
+                        <span className="text-xs font-medium text-red-600 bg-red-100 rounded-full px-2 py-0.5">
+                          {item.total_qty - item.picked_qty} short
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Remaining Stock Panel */}
+              {remainingStockItems.length > 0 && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold text-green-700 flex items-center gap-1.5">
+                      📦 Remaining Stock
+                      <span className="text-xs font-normal text-green-600 bg-green-100 rounded-full px-2 py-0.5">
+                        {totalRemainingStock} units total
+                      </span>
+                    </p>
+                    <button
+                      onClick={handleDownloadRemainingStock}
+                      className="flex items-center gap-1 text-xs font-semibold text-green-700 hover:text-green-800 bg-white border border-green-200 rounded-md px-2 py-1 hover:bg-green-50 transition-colors"
+                    >
+                      <Download className="h-3 w-3" />
+                      Download Excel
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    {remainingStockItems.map(item => (
+                      <div key={item.master_sku} className="flex items-center justify-between rounded-md bg-white border border-green-100 px-3 py-2">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{item.master_sku}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Order {item.total_qty} fulfilled ✓
+                          </p>
+                        </div>
+                        <span className="text-xs font-medium text-green-700 bg-green-100 rounded-full px-2 py-0.5">
+                          +{item.remaining_stock} remaining
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           )}
 

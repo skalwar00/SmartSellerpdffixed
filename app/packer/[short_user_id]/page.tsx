@@ -10,6 +10,8 @@ interface PicklistItem {
   total_qty: number
   picked_qty: number
   status: 'pending' | 'picked' | 'updated'
+  shortage?: boolean
+  remaining_stock?: number
   image_url?: string | null
 }
 
@@ -112,12 +114,15 @@ function QtyModal({
   item,
   onClose,
   onSet,
+  onShortage,
 }: {
   item: PicklistItem
   onClose: () => void
   onSet: (qty: number) => void
+  onShortage: (remainingQty: number) => void
 }) {
   const [val, setVal] = useState(String(item.picked_qty))
+  const [shortageQty, setShortageQty] = useState(String(item.picked_qty))
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -131,13 +136,28 @@ function QtyModal({
     onClose()
   }
 
+  const reportShortage = () => {
+    const availableQty = Math.max(0, parseInt(shortageQty) || 0)
+    haptic([40, 30, 60])
+    onShortage(availableQty)
+    onClose()
+  }
+
+  const clearShortage = () => {
+    haptic(30)
+    onShortage(-1)
+    onClose()
+  }
+
+  const isDone = item.status === 'picked'
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm bg-white rounded-t-3xl p-6 pb-10"
+        className="w-full max-w-sm bg-white rounded-t-3xl p-6 pb-10 overflow-y-auto max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
         <div className="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5" />
@@ -177,10 +197,103 @@ function QtyModal({
 
         <button
           onClick={() => apply(parseInt(val) || 0)}
-          className="w-full h-13 rounded-2xl bg-blue-500 text-white font-bold text-base py-3 active:bg-blue-600"
+          className="w-full rounded-2xl bg-blue-500 text-white font-bold text-base py-3 active:bg-blue-600 mb-5"
         >
           Set {Math.max(0, Math.min(parseInt(val) || 0, item.total_qty))} units
         </button>
+
+        {/* ── Actual Stock Section ── */}
+        {!isDone && (
+          <>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">Actual Stock</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+
+            {item.shortage ? (
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-3">
+                <p className="text-red-600 font-semibold text-sm mb-3">⚠️ Shortage already reported</p>
+                <button
+                  onClick={clearShortage}
+                  className="w-full h-11 rounded-xl border-2 border-red-300 text-red-600 font-semibold text-sm active:bg-red-100"
+                >
+                  Clear Shortage
+                </button>
+              </div>
+            ) : (
+              <div className={`border rounded-2xl p-4 ${
+                (() => {
+                  const av = parseInt(shortageQty) || 0
+                  if (av > item.total_qty) return 'bg-green-50 border-green-200'
+                  if (av > 0 && av < item.total_qty) return 'bg-orange-50 border-orange-200'
+                  return 'bg-orange-50 border-orange-200'
+                })()
+              }`}>
+                <p className="text-gray-700 text-xs font-medium mb-3">
+                  Warehouse mein actual available stock enter karein
+                </p>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="flex-1">
+                    <p className="text-xs text-gray-500 mb-1">Available stock</p>
+                    <input
+                      type="number"
+                      min={0}
+                      value={shortageQty}
+                      onChange={e => setShortageQty(e.target.value)}
+                      className="w-full h-12 rounded-xl border-2 border-gray-200 bg-white text-center text-2xl font-bold text-gray-900 focus:border-blue-400 focus:outline-none"
+                    />
+                  </div>
+                  <span className="text-gray-400 text-sm font-medium mt-4">needed: {item.total_qty}</span>
+                </div>
+                {/* Smart message */}
+                {(() => {
+                  const av = parseInt(shortageQty) || 0
+                  if (av > item.total_qty) {
+                    const extra = av - item.total_qty
+                    return (
+                      <p className="text-green-700 text-xs font-semibold mb-3 bg-green-100 rounded-lg px-2 py-1.5">
+                        ✅ Order fulfill hoga ({item.total_qty} units) + {extra} units remaining stock save hoga
+                      </p>
+                    )
+                  }
+                  if (av > 0 && av < item.total_qty) {
+                    const short = item.total_qty - av
+                    return (
+                      <p className="text-orange-700 text-xs font-semibold mb-3 bg-orange-100 rounded-lg px-2 py-1.5">
+                        ⚠️ Shortage! {short} units short — manager ko notify hoga
+                      </p>
+                    )
+                  }
+                  if (av === item.total_qty) {
+                    return (
+                      <p className="text-green-700 text-xs font-semibold mb-3 bg-green-100 rounded-lg px-2 py-1.5">
+                        ✅ Order exactly fulfill hoga
+                      </p>
+                    )
+                  }
+                  return null
+                })()}
+                <button
+                  onClick={reportShortage}
+                  className={`w-full h-12 rounded-xl text-white font-bold text-sm ${
+                    (() => {
+                      const av = parseInt(shortageQty) || 0
+                      return av >= item.total_qty ? 'bg-green-500 active:bg-green-600' : 'bg-red-500 active:bg-red-600'
+                    })()
+                  }`}
+                >
+                  {(() => {
+                    const av = parseInt(shortageQty) || 0
+                    if (av > item.total_qty) return `✅ Fulfill Order + Save ${av - item.total_qty} Remaining`
+                    if (av === item.total_qty) return '✅ Fulfill Order'
+                    return '⚠️ Report Shortage'
+                  })()}
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   )
@@ -428,8 +541,12 @@ function PickerCard({
     ? Math.round((item.picked_qty / item.total_qty) * 100)
     : 0
 
+  const isShortage = Boolean(item.shortage)
+
   const cardBg = isSelected
     ? 'bg-green-50 border-green-200'
+    : isShortage
+    ? 'bg-red-50 border-red-300'
     : isDone
     ? 'bg-green-50 border-green-300'
     : isUpdated
@@ -440,7 +557,13 @@ function PickerCard({
 
   return (
     <div className={`rounded-2xl border-2 p-4 shadow-sm transition-all ${cardBg} ${syncing ? 'opacity-80' : ''}`}>
-      {isUpdated && (
+      {isShortage && (
+        <div className="mb-2 flex items-center gap-1.5 text-red-600 text-xs font-semibold bg-red-100 rounded-lg px-2 py-1.5">
+          <span>⚠️</span>
+          <span>Shortage reported — manager notified!</span>
+        </div>
+      )}
+      {isUpdated && !isShortage && (
         <div className="mb-2 flex items-center gap-1.5 text-orange-600 text-xs font-semibold bg-orange-100 rounded-lg px-2 py-1.5">
           <span>🔔</span>
           <span>Quantity updated — please re-check!</span>
@@ -577,8 +700,12 @@ function PickerListRow({
   const increment = () => { if (item.picked_qty < item.total_qty && !syncing) sendPick(item.picked_qty + 1) }
   const decrement = () => { if (item.picked_qty > 0 && !syncing) sendPick(item.picked_qty - 1) }
 
+  const isShortage = Boolean(item.shortage)
+
   const rowBg = isSelected
     ? 'bg-green-50 border-green-200'
+    : isShortage
+    ? 'bg-red-50 border-red-200'
     : isDone
     ? 'bg-green-50 border-green-200'
     : isUpdated
@@ -610,7 +737,8 @@ function PickerListRow({
         className="flex-1 min-w-0 text-left"
       >
         <p className="text-sm font-semibold text-gray-900 break-all leading-tight">{item.master_sku}</p>
-        {isUpdated && <p className="text-xs text-orange-500 font-medium">Qty updated — re-check</p>}
+        {isShortage && <p className="text-xs text-red-500 font-medium">⚠️ Shortage reported</p>}
+        {isUpdated && !isShortage && <p className="text-xs text-orange-500 font-medium">Qty updated — re-check</p>}
       </button>
 
       {/* Counter */}
@@ -872,6 +1000,68 @@ export default function PackerPage({
       setIsSyncing(false)
     }
   }
+
+  const handleShortageFromModal = useCallback(async (availableQty: number) => {
+    if (!qtyModalItem) return
+    const sku = qtyModalItem.master_sku
+    const totalQty = qtyModalItem.total_qty
+    const clearing = availableQty === -1
+
+    // Optimistic update
+    if (clearing) {
+      setItems(prev => prev.map(i =>
+        i.master_sku === sku ? { ...i, shortage: false, remaining_stock: 0 } : i
+      ))
+    } else if (availableQty >= totalQty) {
+      // Excess stock — fulfill order, track remaining
+      setItems(prev => prev.map(i =>
+        i.master_sku === sku
+          ? { ...i, shortage: false, picked_qty: totalQty, status: 'picked', remaining_stock: availableQty - totalQty }
+          : i
+      ))
+    } else {
+      // Genuine shortage
+      setItems(prev => prev.map(i =>
+        i.master_sku === sku
+          ? { ...i, shortage: true, picked_qty: availableQty, status: 'pending', remaining_stock: 0 }
+          : i
+      ))
+    }
+    haptic(clearing ? 30 : availableQty >= totalQty ? [40, 30, 80] : [40, 30, 60])
+
+    try {
+      const res = await fetch('/api/picklist/shortage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          short_user_id,
+          master_sku: sku,
+          shortage: !clearing,
+          available_qty: clearing ? 0 : availableQty,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        setItems(prev => prev.map(i =>
+          i.master_sku === sku
+            ? {
+                ...i,
+                shortage: json.shortage ?? false,
+                picked_qty: json.picked_qty ?? i.picked_qty,
+                status: (json.status ?? i.status) as PicklistItem['status'],
+                remaining_stock: json.remaining_stock ?? 0,
+              }
+            : i
+        ))
+        setLastUpdated(new Date())
+      }
+    } catch {
+      // Rollback optimistic update
+      setItems(prev => prev.map(i =>
+        i.master_sku === sku ? { ...i, shortage: clearing, remaining_stock: 0 } : i
+      ))
+    }
+  }, [qtyModalItem, short_user_id])
 
   // ── Screens: loading / error / PIN ─────────────────────────────────
   if (loading) {
@@ -1152,6 +1342,7 @@ export default function PackerPage({
           item={qtyModalItem}
           onClose={() => setQtyModalItem(null)}
           onSet={handleQtySet}
+          onShortage={handleShortageFromModal}
         />
       )}
 

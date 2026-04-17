@@ -65,6 +65,12 @@ export async function approvePayment(paymentId: string, userId: string) {
   const expiryDate = new Date()
   expiryDate.setDate(expiryDate.getDate() + 30)
 
+  // Fetch payment amount + user's referral info in parallel
+  const [paymentRes, userPlanRes] = await Promise.all([
+    supabase.from('payment_requests').select('amount, email').eq('id', paymentId).maybeSingle(),
+    supabase.from('users_plan').select('referred_by').eq('user_id', userId).maybeSingle(),
+  ])
+
   await Promise.all([
     supabase
       .from('payment_requests')
@@ -75,7 +81,51 @@ export async function approvePayment(paymentId: string, userId: string) {
       .update({ plan_type: 'pro', expiry_date: expiryDate.toISOString() })
       .eq('user_id', userId),
   ])
+
+  // ── Auto-create partner commission if user was referred ──────────────────
+  const referralCode = userPlanRes.data?.referred_by
+  const paymentAmount = paymentRes.data?.amount ?? 0
+  const userEmail = paymentRes.data?.email ?? null
+
+  if (referralCode && paymentAmount > 0) {
+    try {
+      const { data: partner } = await supabase
+        .from('partners')
+        .select('id, status')
+        .eq('referral_code', referralCode)
+        .maybeSingle()
+
+      if (partner && partner.status === 'active') {
+        // Count previous approved payments for this user to determine commission type
+        const { count: prevApproved } = await supabase
+          .from('payment_requests')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('status', 'approved')
+
+        const isFirst = (prevApproved ?? 0) <= 1 // current one just got approved so count is 1
+        const commissionPercent = isFirst ? 50 : 15
+        const commissionAmount = Math.round(paymentAmount * commissionPercent / 100)
+
+        await supabase.from('partner_commissions').insert({
+          partner_id: partner.id,
+          payment_request_id: paymentId,
+          referred_user_id: userId,
+          referred_user_email: userEmail,
+          commission_type: isFirst ? 'first' : 'recurring',
+          payment_amount: paymentAmount,
+          commission_percent: commissionPercent,
+          commission_amount: commissionAmount,
+          status: 'pending',
+        })
+      }
+    } catch {
+      // Commission creation failure should not block payment approval
+    }
+  }
+
   revalidatePath('/admin/payments')
+  revalidatePath('/admin/partners')
   revalidatePath('/admin')
 }
 

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, PackageCheck, AlertTriangle, Archive, Smartphone, RefreshCw, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { BookDemoButton } from '@/components/book-demo-button'
 
@@ -11,15 +11,12 @@ export default async function LandingPage() {
     const { data, error } = await supabase.auth.getUser()
     if (!error && data.user) redirect('/dashboard')
   } catch (err) {
-    // next/navigation's redirect() throws internally — let it propagate so the
-    // redirect actually happens. Only swallow genuine cookie/JSON parse errors.
     if (
       err instanceof Error &&
       (err.message.includes('NEXT_REDIRECT') || (err as { digest?: string }).digest?.startsWith('NEXT_REDIRECT'))
     ) {
       throw err
     }
-    // Malformed or oversized session cookies — show the landing page normally.
   }
 
   return (
@@ -64,26 +61,46 @@ export default async function LandingPage() {
       </header>
 
       {/* ── Hero ── */}
-      <section className="relative overflow-hidden border-b">
+      <section className="relative overflow-hidden border-b bg-white">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(59,130,246,0.06),transparent_60%)]" />
         <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
           <div className="grid items-center gap-10 lg:grid-cols-2">
-            <div className="flex flex-col gap-6">
-              <div className="inline-flex w-fit items-center gap-2 rounded-full border bg-muted/50 px-4 py-1.5 text-xs font-semibold text-muted-foreground">
+            <div className="flex flex-col gap-7">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-1.5 text-xs font-semibold text-blue-700">
                 Flipkart · Myntra · Meesho
               </div>
-              <h1 className="text-3xl font-bold tracking-tight text-balance sm:text-5xl">
-                Ek jagah se sab portals manage karein
+              <h1 className="text-3xl font-bold tracking-tight text-balance text-slate-900 sm:text-5xl">
+                One dashboard for all your e-commerce portals
               </h1>
-              <p className="max-w-lg text-base leading-relaxed text-muted-foreground sm:text-lg">
-                Orders upload karein, picklist banayein, packer ko bhejein aur profit track karein —
-                teeno platforms ka kaam ek dashboard mein.
-              </p>
+              <ul className="flex flex-col gap-4">
+                <li className="flex items-start gap-3">
+                  <span className="text-xl leading-tight flex-shrink-0 mt-0.5">⚡</span>
+                  <div>
+                    <span className="font-bold text-slate-900">Zero-Manual Effort: </span>
+                    <span className="text-slate-600">No more downloading 3 different CSVs and merging them.</span>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-xl leading-tight flex-shrink-0 mt-0.5">🔍</span>
+                  <div>
+                    <span className="font-bold text-slate-900">Shortage Radar: </span>
+                    <span className="text-slate-600">See exactly what&apos;s missing before the packing even starts.</span>
+                  </div>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="text-xl leading-tight flex-shrink-0 mt-0.5">🛡️</span>
+                  <div>
+                    <span className="font-bold text-slate-900">Penalty Shield: </span>
+                    <span className="text-slate-600">Eliminate wrong-product dispatches that lead to buyer returns and bad ratings.</span>
+                  </div>
+                </li>
+              </ul>
               <div className="flex flex-wrap gap-3">
-                <Button size="lg" asChild>
-                  <Link href="/auth/sign-up">14 din free try karein <ArrowRight className="ml-2 h-4 w-4" /></Link>
+                <Button size="lg" className="bg-blue-900 hover:bg-blue-800 text-white shadow-lg" asChild>
+                  <Link href="/auth/sign-up">Start 14-day free trial <ArrowRight className="ml-2 h-4 w-4" /></Link>
                 </Button>
-                <Button size="lg" variant="outline" asChild>
-                  <Link href="#how-it-works">Kaise kaam karta hai?</Link>
+                <Button size="lg" variant="outline" className="border-blue-900 text-blue-900 hover:bg-blue-50" asChild>
+                  <Link href="#how-it-works">See how it works</Link>
                 </Button>
               </div>
             </div>
@@ -91,7 +108,7 @@ export default async function LandingPage() {
             {/* Hero visual — dashboard snapshot */}
             <div className="rounded-2xl border bg-card p-5 shadow-xl">
               <div className="mb-3 flex items-center justify-between border-b pb-3">
-                <span className="text-sm font-semibold">Today's Picklist</span>
+                <span className="text-sm font-semibold">Today&apos;s Picklist</span>
                 <span className="flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
                   <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
                   Live
@@ -151,7 +168,7 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* ── Live Packer ── */}
+      {/* ── Live Packer — Grid View ── */}
       <section className="py-16 sm:py-24 bg-gradient-to-br from-blue-950 via-blue-900 to-indigo-900 text-white overflow-hidden">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="grid items-center gap-12 lg:grid-cols-2">
@@ -164,25 +181,23 @@ export default async function LandingPage() {
                 Live Packer System
               </div>
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Push orders. Packer picks.<br className="hidden sm:block" />
+                Send orders. Packer picks.<br className="hidden sm:block" />
                 <span className="text-blue-300"> No app install needed.</span>
               </h2>
               <p className="text-base leading-relaxed text-blue-100/80 sm:text-lg">
-                Ek click mein apni team ko live picklist bhejein. Packer mobile browser mein
-                kholta hai — koi download nahi, koi login nahi. Real-time sync se har pick
-                turant dashboard pe dikhti hai.
+                Push a live picklist to your packer with one click. They open it in a mobile browser — no download, no login required. Every pick syncs instantly to your dashboard in real time.
               </p>
               <ul className="flex flex-col gap-3">
                 {[
-                  ['📲', 'Packer ko sirf ek link — koi app install nahi'],
-                  ['⚡', 'Real-time sync — pick hote hi dashboard pe update'],
-                  ['🖼️', 'Product images seedha picklist mein dikhti hain'],
-                  ['🔒', 'PIN-protected — sirf aapki team access kar sake'],
-                  ['🎉', 'Sari qty pack hone par celebration animation'],
-                ].map(([icon, text]) => (
-                  <li key={text} className="flex items-start gap-3">
-                    <span className="text-lg leading-tight flex-shrink-0">{icon}</span>
-                    <span className="text-sm leading-relaxed text-blue-100/90">{text}</span>
+                  [Smartphone,  'Packer only needs a link — no app installation'],
+                  [RefreshCw,   'Real-time sync — updates appear on your dashboard instantly'],
+                  [PackageCheck,'Product images visible directly in the picklist'],
+                  [Lock,        'PIN-protected — only your team can access'],
+                ].map(([Icon, text], i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    {/* @ts-expect-error Icon is a valid component */}
+                    <Icon className="h-5 w-5 text-blue-300 flex-shrink-0 mt-0.5" />
+                    <span className="text-sm leading-relaxed text-blue-100/90">{text as string}</span>
                   </li>
                 ))}
               </ul>
@@ -192,38 +207,77 @@ export default async function LandingPage() {
                 </Link>
               </div>
             </div>
-            {/* Phone mockup */}
+
+            {/* Packer Grid Mockup */}
             <div className="flex justify-center lg:justify-end">
-              <div className="relative w-[220px] sm:w-[260px]">
+              <div className="w-full max-w-[300px]">
+                {/* Phone frame */}
                 <div className="rounded-[2.5rem] border-4 border-white/20 bg-gray-900 p-2 shadow-2xl">
                   <div className="rounded-[2rem] bg-gray-50 overflow-hidden">
-                    <div className="flex items-center justify-between bg-white px-4 py-2 text-[10px] font-semibold text-gray-500">
-                      <span>Picklist</span>
-                      <span className="flex items-center gap-1 text-green-600"><span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />Live</span>
+                    {/* Status bar */}
+                    <div className="flex items-center justify-between bg-white px-4 py-2.5 text-[10px] font-semibold text-gray-500 border-b border-gray-100">
+                      <span className="font-bold text-gray-800">Packer View</span>
+                      <span className="flex items-center gap-1 text-green-600">
+                        <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block animate-pulse" />
+                        Live
+                      </span>
                     </div>
-                    <div className="space-y-1.5 bg-gray-50 p-2">
+                    {/* Grid layout */}
+                    <div className="grid grid-cols-2 gap-1.5 p-2 bg-gray-100">
                       {[
-                        {sku:'KURTA-BLU-M',total:3,picked:3,done:true},
-                        {sku:'PALAZZO-BLK-L',total:2,picked:1,done:false},
-                        {sku:'DUPATTA-RED-FS',total:5,picked:0,done:false},
-                        {sku:'TOP-WHT-S',total:1,picked:0,done:false},
-                      ].map(item=>(
-                        <div key={item.sku} className={`flex items-center gap-2 rounded-lg border px-2 py-2 text-[10px] ${item.done?'border-green-200 bg-green-50':'border-gray-200 bg-white'}`}>
-                          <div className={`h-3.5 w-3.5 flex-shrink-0 rounded border-2 flex items-center justify-center ${item.done?'border-green-500 bg-green-500':'border-gray-300'}`}>
-                            {item.done && <span className="text-[7px] text-white font-black">✓</span>}
+                        { sku: 'KURTA-BLU-M', picked: 3, total: 3, done: true, shortage: false },
+                        { sku: 'PALAZZO-BLK', picked: 2, total: 2, done: true, shortage: false },
+                        { sku: 'DUPATTA-RED',  picked: 1, total: 5, done: false, shortage: true  },
+                        { sku: 'TOP-WHT-S',   picked: 0, total: 1, done: false, shortage: false },
+                      ].map(item => (
+                        <div
+                          key={item.sku}
+                          className={`rounded-2xl border-2 p-3 flex flex-col gap-2 ${
+                            item.shortage
+                              ? 'bg-red-50 border-red-300'
+                              : item.done
+                              ? 'bg-green-50 border-green-300'
+                              : 'bg-white border-gray-200'
+                          }`}
+                        >
+                          {item.shortage && (
+                            <span className="text-[9px] font-bold text-red-600 bg-red-100 rounded px-1 py-0.5">⚠ Shortage</span>
+                          )}
+                          <p className="text-[10px] font-bold text-gray-900 leading-tight break-all">{item.sku}</p>
+                          <div className="w-full bg-gray-200 rounded-full h-1">
+                            <div
+                              className={`h-1 rounded-full ${item.shortage ? 'bg-red-400' : item.done ? 'bg-green-500' : 'bg-blue-500'}`}
+                              style={{ width: `${Math.round((item.picked / item.total) * 100)}%` }}
+                            />
                           </div>
-                          <span className={`flex-1 font-semibold truncate ${item.done?'text-green-700':'text-gray-800'}`}>{item.sku}</span>
-                          <span className={`font-black ${item.done?'text-green-600':'text-blue-600'}`}>{item.picked}</span>
-                          <span className="text-gray-400">/{item.total}</span>
-                          <div className={`h-5 w-5 rounded-md flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 ${item.done?'bg-green-400 opacity-30':'bg-blue-500'}`}>+</div>
+                          <div className="flex items-center justify-between">
+                            <span className={`text-xs font-black ${item.done ? 'text-green-600' : item.shortage ? 'text-red-600' : 'text-gray-800'}`}>
+                              {item.picked}
+                            </span>
+                            <span className="text-[10px] text-gray-400">/{item.total}</span>
+                            {item.done
+                              ? <span className="text-sm">✅</span>
+                              : (
+                                <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-white text-xs font-black ${item.shortage ? 'bg-red-400' : 'bg-blue-500'}`}>
+                                  +
+                                </span>
+                              )
+                            }
+                          </div>
                         </div>
                       ))}
                     </div>
-                    <div className="bg-white border-t border-gray-100 px-3 py-2 text-center text-[9px] text-gray-400">1 of 4 picked · syncing...</div>
+                    {/* Footer */}
+                    <div className="bg-white border-t border-gray-100 px-3 py-2 text-center text-[9px] text-gray-400">
+                      2 of 4 picked · syncing…
+                    </div>
                   </div>
                 </div>
-                <div className="absolute -right-6 top-8 rounded-xl bg-green-500 px-3 py-1.5 text-xs font-bold text-white shadow-lg">✅ Picked!</div>
-                <div className="absolute -left-8 bottom-12 rounded-xl bg-white px-3 py-1.5 text-xs font-bold text-gray-800 shadow-lg">⚡ Real-time</div>
+                {/* Callout badges */}
+                <div className="relative mt-0">
+                  <div className="absolute -right-4 -top-32 rounded-xl bg-green-500 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-lg">✅ Picked!</div>
+                  <div className="absolute -left-4 -top-16 rounded-xl bg-red-500 px-2.5 py-1.5 text-[10px] font-bold text-white shadow-lg">⚠ Shortage!</div>
+                </div>
               </div>
             </div>
           </div>
@@ -234,8 +288,8 @@ export default async function LandingPage() {
       <section id="how-it-works" className="py-16 sm:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="mx-auto max-w-2xl text-center mb-14">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-4xl">Kaise kaam karta hai?</h2>
-            <p className="mt-4 text-base text-muted-foreground">Order upload se packed tak — sirf 4 steps</p>
+            <h2 className="text-2xl font-bold tracking-tight sm:text-4xl">How It Works</h2>
+            <p className="mt-4 text-base text-muted-foreground">From order upload to fully packed — just 4 steps</p>
           </div>
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
 
@@ -243,8 +297,8 @@ export default async function LandingPage() {
             <div className="flex flex-col rounded-2xl border bg-card p-6 shadow-sm">
               <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-sm font-black text-white shadow">1</div>
               <div className="mb-3 text-3xl">📂</div>
-              <h3 className="mb-2 text-base font-bold">Order Upload</h3>
-              <p className="mb-4 text-sm leading-relaxed text-muted-foreground">Teen portals ki CSV/Excel ek saath upload karein</p>
+              <h3 className="mb-2 text-base font-bold">Upload Orders</h3>
+              <p className="mb-4 text-sm leading-relaxed text-muted-foreground">Import CSV or Excel files from all three portals at once</p>
               <div className="mt-auto rounded-xl bg-blue-50 p-3 space-y-1.5 text-xs">
                 <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-yellow-500 flex-shrink-0" /><span className="text-gray-600 truncate">flipkart_orders.xlsx</span><span className="ml-auto text-green-600 font-semibold">✓</span></div>
                 <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-pink-500 flex-shrink-0" /><span className="text-gray-600 truncate">myntra_report.csv</span><span className="ml-auto text-green-600 font-semibold">✓</span></div>
@@ -257,7 +311,7 @@ export default async function LandingPage() {
               <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-full bg-violet-600 text-sm font-black text-white shadow">2</div>
               <div className="mb-3 text-3xl">⚡</div>
               <h3 className="mb-2 text-base font-bold">Auto SKU Map & Push</h3>
-              <p className="mb-4 text-sm leading-relaxed text-muted-foreground">Portal SKU → Master SKU auto-map. Ek click mein live picklist push</p>
+              <p className="mb-4 text-sm leading-relaxed text-muted-foreground">Portal SKU auto-maps to your Master SKU. Push live picklist in one click</p>
               <div className="mt-auto rounded-xl bg-violet-50 p-3 text-xs space-y-2">
                 <div className="flex justify-between"><span className="text-gray-500">Mapped</span><span className="font-bold text-violet-700">24/24 ✓</span></div>
                 <div className="h-2 w-full rounded-full bg-violet-100"><div className="h-2 w-full rounded-full bg-violet-500" /></div>
@@ -270,7 +324,7 @@ export default async function LandingPage() {
               <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-full bg-green-600 text-sm font-black text-white shadow">3</div>
               <div className="mb-3 text-3xl">📱</div>
               <h3 className="mb-2 text-base font-bold">Packer Mobile View</h3>
-              <p className="mb-4 text-sm leading-relaxed text-muted-foreground">Link share karein — koi app nahi, koi login nahi. Item pick karta hai</p>
+              <p className="mb-4 text-sm leading-relaxed text-muted-foreground">Share a link — no app, no login. Packer picks items and reports stock status</p>
               <div className="mt-auto rounded-xl bg-green-50 p-3 text-xs space-y-1.5">
                 {[{sku:'KURTA-BLU-M',p:3,t:3,done:true},{sku:'PALAZZO-BLK',p:1,t:2,done:false}].map(item=>(
                   <div key={item.sku} className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 ${item.done?'border-green-200 bg-green-100':'bg-white border-gray-200'}`}>
@@ -287,13 +341,13 @@ export default async function LandingPage() {
               <div className="mb-4 flex h-9 w-9 items-center justify-center rounded-full bg-orange-500 text-sm font-black text-white shadow">4</div>
               <div className="mb-3 text-3xl">📊</div>
               <h3 className="mb-2 text-base font-bold">Live Status Dashboard</h3>
-              <p className="mb-4 text-sm leading-relaxed text-muted-foreground">Real-time dikhta hai kitna pack hua, kya baaki hai — bina refresh kiye</p>
+              <p className="mb-4 text-sm leading-relaxed text-muted-foreground">See what&apos;s packed and what&apos;s pending in real time — no refresh needed</p>
               <div className="mt-auto rounded-xl bg-orange-50 p-3 text-xs space-y-2">
                 <div className="flex justify-between"><span>Picked ✅</span><span className="font-bold text-green-700">18</span></div>
                 <div className="flex justify-between"><span>Pending ⏳</span><span className="font-bold text-orange-600">6</span></div>
                 <div className="h-2 w-full rounded-full bg-orange-100"><div className="h-2 rounded-full bg-green-500" style={{width:'75%'}} /></div>
                 <div className="flex items-center gap-1.5 text-[10px] text-orange-600 font-semibold">
-                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block animate-pulse" />Live updating...
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block animate-pulse" />Live updating
                 </div>
               </div>
             </div>
@@ -310,12 +364,112 @@ export default async function LandingPage() {
         </div>
       </section>
 
+      {/* ── Smart Stock Management (Shortage + Remaining Qty) ── */}
+      <section className="border-t border-b bg-gradient-to-br from-red-50 via-orange-50 to-yellow-50 py-16 sm:py-24">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <div className="mx-auto max-w-2xl text-center mb-14">
+            <div className="inline-flex items-center gap-2 rounded-full bg-orange-100 border border-orange-200 px-4 py-1.5 text-xs font-semibold text-orange-700 mb-4">
+              ✨ New Feature
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight sm:text-4xl">Smart Stock Management</h2>
+            <p className="mt-4 text-base text-muted-foreground">
+              Your packer now reports actual warehouse stock. Shortages are flagged instantly. Extra stock is tracked automatically.
+            </p>
+          </div>
+
+          <div className="grid gap-8 lg:grid-cols-2">
+
+            {/* Shortage reporting */}
+            <div className="rounded-2xl border-2 border-red-200 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900">Shortage Reporting</h3>
+                  <p className="text-xs text-muted-foreground">Packer enters actual available stock</p>
+                </div>
+              </div>
+              <p className="mb-5 text-sm text-muted-foreground leading-relaxed">
+                When the packer finds less stock than required, they enter the actual quantity available. The system immediately flags the shortage and notifies the manager — no manual follow-up needed.
+              </p>
+              <div className="rounded-xl bg-red-50 border border-red-200 p-4 space-y-3">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Example — Packer flow</p>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 rounded-lg bg-white border border-gray-200 px-3 py-2 text-xs">
+                    <p className="text-gray-500">Needed qty</p>
+                    <p className="text-2xl font-black text-gray-900">5</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <div className="flex-1 rounded-lg bg-white border border-red-200 px-3 py-2 text-xs">
+                    <p className="text-red-500">Available stock</p>
+                    <p className="text-2xl font-black text-red-600">2</p>
+                  </div>
+                </div>
+                <div className="rounded-lg bg-red-100 px-3 py-2.5 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                  <p className="text-xs font-semibold text-red-700">3 units short — manager notified automatically</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Remaining qty tracking */}
+            <div className="rounded-2xl border-2 border-green-200 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-100">
+                  <Archive className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900">Remaining Stock Tracking</h3>
+                  <p className="text-xs text-muted-foreground">Extra stock saved to inventory automatically</p>
+                </div>
+              </div>
+              <p className="mb-5 text-sm text-muted-foreground leading-relaxed">
+                When the packer has more stock than the order requires, the extra units are automatically logged as remaining inventory. This keeps your stock count accurate without any extra data entry.
+              </p>
+              <div className="rounded-xl bg-green-50 border border-green-200 p-4 space-y-3">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Example — Packer flow</p>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 rounded-lg bg-white border border-gray-200 px-3 py-2 text-xs">
+                    <p className="text-gray-500">Needed qty</p>
+                    <p className="text-2xl font-black text-gray-900">3</p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <div className="flex-1 rounded-lg bg-white border border-green-200 px-3 py-2 text-xs">
+                    <p className="text-green-600">Available stock</p>
+                    <p className="text-2xl font-black text-green-700">7</p>
+                  </div>
+                </div>
+                <div className="rounded-lg bg-green-100 px-3 py-2.5 flex items-center gap-2">
+                  <PackageCheck className="h-4 w-4 text-green-700 flex-shrink-0" />
+                  <p className="text-xs font-semibold text-green-800">Order fulfilled + 4 units saved to remaining stock</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Combined benefit banner */}
+          <div className="mt-8 rounded-2xl border border-orange-200 bg-orange-50 px-6 py-5 flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+            <span className="text-4xl">📦</span>
+            <div className="flex-1">
+              <p className="font-bold text-gray-900">Zero stock guesswork</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Shortage alerts go straight to the manager. Remaining stock is logged. Your team always knows exactly what&apos;s in the warehouse.
+              </p>
+            </div>
+            <Button size="sm" asChild className="flex-shrink-0">
+              <Link href="/auth/sign-up">Try for free</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
       {/* ── Features deep-dive ── */}
       <section id="features" className="border-t bg-muted/20 py-16 sm:py-24">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="mx-auto max-w-2xl text-center mb-14">
-            <h2 className="text-2xl font-bold tracking-tight sm:text-4xl">Sab kuch jo aapko chahiye</h2>
-            <p className="mt-4 text-base text-muted-foreground">Har feature specifically Indian e-commerce sellers ke liye bana hai</p>
+            <h2 className="text-2xl font-bold tracking-tight sm:text-4xl">Everything you need</h2>
+            <p className="mt-4 text-base text-muted-foreground">Every feature built specifically for Indian e-commerce sellers</p>
           </div>
 
           <div className="grid gap-8 lg:grid-cols-2">
@@ -326,11 +480,11 @@ export default async function LandingPage() {
                 <span className="text-2xl">🔗</span>
                 <div>
                   <h3 className="font-bold">Smart SKU Mapping</h3>
-                  <p className="text-xs text-muted-foreground">Portal code → aapka Master SKU</p>
+                  <p className="text-xs text-muted-foreground">Portal code → your Master SKU</p>
                 </div>
               </div>
               <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
-                Flipkart FSN, Myntra Style ID ya Meesho Sub-SKU — system automatically aapke master inventory se match karta hai.
+                Flipkart FSN, Myntra Style ID, or Meesho Sub-SKU — the system automatically matches portal codes to your master inventory.
               </p>
               <div className="rounded-xl bg-muted/50 p-3 text-xs font-mono">
                 <div className="mb-1.5 grid grid-cols-3 font-semibold text-muted-foreground not-italic text-[10px] uppercase tracking-wide">
@@ -360,7 +514,7 @@ export default async function LandingPage() {
                 </div>
               </div>
               <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
-                Har order ka net profit calculate hota hai — commission, shipping, return cost sab minus karke.
+                Net profit is calculated for every order — platform commission, shipping, and return costs all deducted automatically.
               </p>
               <div className="rounded-xl bg-muted/50 p-3 text-xs space-y-2">
                 {[
@@ -383,17 +537,17 @@ export default async function LandingPage() {
               </div>
             </div>
 
-            {/* Feature C — Costing Management */}
+            {/* Feature C — Costing */}
             <div className="rounded-2xl border bg-card p-6 shadow-sm">
               <div className="mb-4 flex items-center gap-3">
                 <span className="text-2xl">🧮</span>
                 <div>
                   <h3 className="font-bold">Design-Level Costing</h3>
-                  <p className="text-xs text-muted-foreground">Har SKU ka accurate cost breakdown</p>
+                  <p className="text-xs text-muted-foreground">Accurate cost breakdown per SKU</p>
                 </div>
               </div>
               <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
-                Fabric, stitching, packaging — har cost enter karein aur exact profit jaanein bina Excel ke.
+                Enter fabric, stitching, and packaging costs per design. Know your exact profit on each SKU without any spreadsheets.
               </p>
               <div className="rounded-xl bg-muted/50 p-3 text-xs space-y-1.5">
                 <div className="font-semibold text-[10px] uppercase tracking-wide text-muted-foreground mb-2">KURTA-BLU-M — Cost Breakdown</div>
@@ -423,11 +577,11 @@ export default async function LandingPage() {
                 <span className="text-2xl">↩️</span>
                 <div>
                   <h3 className="font-bold">Return & RTO Analysis</h3>
-                  <p className="text-xs text-muted-foreground">Samjhein kyun return aa raha hai</p>
+                  <p className="text-xs text-muted-foreground">Understand why returns are happening</p>
                 </div>
               </div>
               <p className="mb-4 text-sm text-muted-foreground leading-relaxed">
-                Customer returns aur RTO ko category-wise track karein. Kaunsa SKU zyada return ho raha hai — turant pata chalega.
+                Track customer returns and RTOs by category. Instantly see which SKUs have the highest return rate.
               </p>
               <div className="rounded-xl bg-muted/50 p-3 text-xs space-y-2">
                 <div className="grid grid-cols-3 gap-2">
@@ -460,7 +614,7 @@ export default async function LandingPage() {
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="mx-auto max-w-2xl text-center mb-12">
             <h2 className="text-2xl font-bold tracking-tight sm:text-4xl">Simple pricing</h2>
-            <p className="mt-4 text-base text-muted-foreground">14 din free trial — koi credit card nahi chahiye</p>
+            <p className="mt-4 text-base text-muted-foreground">14-day free trial — no credit card required</p>
           </div>
           <div className="mx-auto grid max-w-4xl gap-6 sm:grid-cols-3">
             <div className="rounded-2xl border bg-card p-6 shadow-sm">
@@ -489,7 +643,7 @@ export default async function LandingPage() {
                 <span className="text-3xl font-bold">₹7,000</span>
                 <span className="text-sm text-muted-foreground">/3 months</span>
               </div>
-              <p className="mt-1 text-xs text-green-600 font-medium">₹2,000 saved vs monthly</p>
+              <p className="mt-1 text-xs text-green-600 font-medium">Save ₹2,000 vs monthly</p>
               <ul className="mt-5 space-y-2.5">
                 {['Unlimited orders','All 3 platforms','Live picklist','Profit analytics','SKU mapping'].map(f=>(
                   <li key={f} className="flex items-center gap-2.5 text-sm">
@@ -508,7 +662,7 @@ export default async function LandingPage() {
                 <span className="text-3xl font-bold">₹18,000</span>
                 <span className="text-sm text-muted-foreground">/year</span>
               </div>
-              <p className="mt-1 text-xs text-green-600 font-medium">₹18,000 saved vs monthly</p>
+              <p className="mt-1 text-xs text-green-600 font-medium">Save ₹18,000 vs monthly</p>
               <ul className="mt-5 space-y-2.5">
                 {['Unlimited orders','All 3 platforms','Live picklist','Profit analytics','SKU mapping'].map(f=>(
                   <li key={f} className="flex items-center gap-2.5 text-sm">
@@ -528,10 +682,10 @@ export default async function LandingPage() {
       <section className="border-t bg-primary py-14">
         <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
           <h2 className="text-2xl font-bold tracking-tight text-primary-foreground sm:text-4xl">
-            Apna warehouse streamline karein aaj se
+            Streamline your warehouse starting today
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base text-primary-foreground/80 sm:text-lg">
-            14 din free try karein — koi credit card nahi, koi commitment nahi.
+            14-day free trial — no credit card, no commitment.
           </p>
           <Button size="lg" variant="secondary" className="mt-7" asChild>
             <Link href="/auth/sign-up">Get started for free <ArrowRight className="ml-2 h-4 w-4" /></Link>
