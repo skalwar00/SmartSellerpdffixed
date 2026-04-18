@@ -270,6 +270,7 @@ function parseCSVLine(line: string): string[] {
 
 export default function PicklistPage() {
   const { data, error, isLoading } = useSWR('user-data', fetchUserData)
+  const unmappedSectionRef = useRef<HTMLDivElement>(null)
   const [orders, setOrders] = useState<OrderData[]>([])
   const [unmappedRows, setUnmappedRows] = useState<MappingRow[]>([])
   const [isSyncingMaster, setIsSyncingMaster] = useState(false)
@@ -378,6 +379,68 @@ export default function PicklistPage() {
     }))
   }
 
+  // After new mappings are saved, update any live picklist items that were pushed
+  // with the portal SKU as their master_sku (i.e. unmapped at push time).
+  const applyMappingsToLivePicklist = async (
+    supabase: ReturnType<typeof createClient>,
+    savedMappings: { portalSku: string; masterSku: string; comboSkus?: string[] }[],
+    userId: string
+  ): Promise<boolean> => {
+    const { data: existing } = await supabase
+      .from('picklist_items')
+      .select('master_sku, total_qty, picked_qty, status')
+      .eq('user_id', userId)
+
+    if (!existing || existing.length === 0) return false
+
+    const existingMap = new Map(existing.map(i => [i.master_sku.toUpperCase(), i]))
+    const toUpsert: { user_id: string; master_sku: string; total_qty: number; picked_qty: number; status: string }[] = []
+    const toDelete: string[] = []
+
+    for (const mapping of savedMappings) {
+      const portalKey = mapping.portalSku.toUpperCase()
+      const oldItem = existingMap.get(portalKey)
+      if (!oldItem) continue // this portal SKU was never pushed as master_sku
+
+      toDelete.push(portalKey)
+
+      // All master SKUs this portal maps to (1 for regular, multiple for combo)
+      const masterSkus = [
+        mapping.masterSku.toUpperCase(),
+        ...((mapping.comboSkus || []).map(s => s.toUpperCase()).filter(Boolean)),
+      ]
+
+      for (const masterKey of masterSkus) {
+        const existing = existingMap.get(masterKey)
+        if (existing) {
+          toUpsert.push({
+            user_id: userId,
+            master_sku: masterKey,
+            total_qty: existing.total_qty + oldItem.total_qty,
+            picked_qty: existing.picked_qty,
+            status: existing.status,
+          })
+        } else {
+          toUpsert.push({
+            user_id: userId,
+            master_sku: masterKey,
+            total_qty: oldItem.total_qty,
+            picked_qty: oldItem.picked_qty,
+            status: oldItem.status,
+          })
+        }
+      }
+    }
+
+    if (toDelete.length === 0) return false
+
+    if (toUpsert.length > 0) {
+      await supabase.from('picklist_items').upsert(toUpsert, { onConflict: 'user_id,master_sku' })
+    }
+    await supabase.from('picklist_items').delete().eq('user_id', userId).in('master_sku', toDelete)
+    return true
+  }
+
   const handleSaveLabelMappings = async () => {
     const supabase = createClient()
     const toSave = labelUnmappedRows.filter(r => r.masterSku.trim())
@@ -403,7 +466,21 @@ export default function PicklistPage() {
       const { error: pendingError } = await supabase.from('users_plan').update({ pending_unmapped_skus: remaining }).eq('user_id', user.id)
       if (pendingError) { /* column may not exist yet — non-critical */ }
 
-      toast.success(`${toSave.length} SKU mapping${toSave.length > 1 ? 's' : ''} save ho gayi`)
+      // Auto-update live picklist items that were pushed with these portal SKUs
+      const picklistUpdated = await applyMappingsToLivePicklist(
+        supabase,
+        toSave.map(r => ({ portalSku: r.portalSku, masterSku: r.masterSku.trim().toUpperCase(), comboSkus: r.comboSkus })),
+        user.id
+      )
+      if (picklistUpdated) {
+        await fetchLiveItems(true)
+        if (shortUserId) {
+          supabase.channel(`picklist:${shortUserId}`).send({ type: 'broadcast', event: 'picklist_update', payload: {} })
+        }
+        toast.success(`${toSave.length} SKU mapping${toSave.length > 1 ? 's' : ''} save ho gayi — picklist bhi update ho gayi!`)
+      } else {
+        toast.success(`${toSave.length} SKU mapping${toSave.length > 1 ? 's' : ''} save ho gayi`)
+      }
       setLabelUnmappedRows(remaining.map(sku => ({ portalSku: sku, masterSku: '' })))
       mutate('user-data')
     } catch (err) {
@@ -463,17 +540,37 @@ export default function PicklistPage() {
   }, [data?.userId, fetchLiveItems])
 
   const findSkuColumn = (headers: string[]): number => {
-    const normalizedHeaders = headers.map(h => h.trim().toLowerCase())
-    const priorityCols = ['seller_sku_code', 'seller sku code', 'seller_sku', 'seller sku']
-    for (const pCol of priorityCols) {
-      const idx = normalizedHeaders.findIndex(h => h === pCol)
+    const normalizedHeaders = headers.map(h => h.trim().toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim())
+    // Tier 1: exact matches for the most common marketplace column names
+    const exactMatches = [
+      'sku', 'seller sku', 'seller sku code', 'seller sku id',
+      'seller skucode', 'seller skuid', 'seller sku code',
+      'sku code', 'sku id', 'item sku', 'product sku',
+      'listing sku', 'sku number', 'seller listing sku',
+    ]
+    for (const col of exactMatches) {
+      const idx = normalizedHeaders.findIndex(h => h === col)
       if (idx !== -1) return idx
     }
-    return normalizedHeaders.findIndex(h => h.includes('sku'))
+    // Tier 2: columns that start with 'sku' but are not date/time columns
+    const dateKeywords = ['date', 'time', 'at', 'on', 'updated', 'created', 'modified', 'dispatched', 'delivered', 'pickup', 'return']
+    const startsWithSku = normalizedHeaders.findIndex(h =>
+      h.startsWith('sku') && !dateKeywords.some(d => h.includes(d))
+    )
+    if (startsWithSku !== -1) return startsWithSku
+    // Tier 3: any column that contains 'sku' but not date/time keywords
+    return normalizedHeaders.findIndex(h =>
+      h.includes('sku') && !dateKeywords.some(d => h.includes(d))
+    )
   }
 
   const findQtyColumn = (headers: string[]): number => {
-    const normalizedHeaders = headers.map(h => h.trim().toLowerCase())
+    const normalizedHeaders = headers.map(h => h.trim().toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim())
+    const exactMatches = ['qty', 'quantity', 'units', 'ordered qty', 'ordered quantity', 'order qty', 'total qty', 'item qty']
+    for (const col of exactMatches) {
+      const idx = normalizedHeaders.findIndex(h => h === col)
+      if (idx !== -1) return idx
+    }
     return normalizedHeaders.findIndex(h =>
       h.includes('qty') || h.includes('quantity') || h.includes('units')
     )
@@ -488,11 +585,11 @@ export default function PicklistPage() {
     try {
       for (const file of files) {
         if (file.name.endsWith('.csv')) {
-          const text = await file.text()
-          const lines = text.split('\n').filter(l => l.trim())
+          const rawText = await file.text()
+          const text = rawText.replace(/^\uFEFF/, '')
+          const lines = text.split(/\r?\n/).filter(l => l.trim())
           if (lines.length === 0) { toast.error(`Empty file: ${file.name}`); continue }
-          const rawHeaders = lines[0].split(',')
-          const headers = rawHeaders.map(h => h.trim())
+          const headers = parseCSVLine(lines[0]).map(h => h.trim())
           const skuIndex = findSkuColumn(headers)
           const qtyIndex = findQtyColumn(headers)
           if (skuIndex === -1) { toast.error(`SKU column not found in ${file.name}`); continue }
@@ -500,12 +597,14 @@ export default function PicklistPage() {
             const cols = parseCSVLine(lines[i])
             if (cols[skuIndex]) {
               const skuVal = cols[skuIndex].trim().toUpperCase().replace(/"/g, '')
+              // Skip values that look like dates/timestamps (mis-detection guard)
+              const looksLikeDate = /^\d{4}[-\/\s]\d{2}[-\/\s]\d{2}/.test(skuVal) || /^\d{2}[-\/]\d{2}[-\/]\d{4}/.test(skuVal) || /^\d{4}\s+\d{1,2}:\d{2}/.test(skuVal)
               let qtyVal = 1
               if (qtyIndex !== -1 && cols[qtyIndex]) {
                 const parsed = parseInt(cols[qtyIndex].replace(/"/g, ''), 10)
                 if (!isNaN(parsed)) qtyVal = parsed
               }
-              if (skuVal) allOrders.push({ Portal_SKU: skuVal, Qty: qtyVal })
+              if (skuVal && !looksLikeDate) allOrders.push({ Portal_SKU: skuVal, Qty: qtyVal })
             }
           }
         } else if (file.name.endsWith('.pdf')) {
@@ -584,9 +683,10 @@ export default function PicklistPage() {
     let rows: string[][]
     try {
       if (fileName.endsWith('.csv')) {
-        const text = await file.text()
+        const rawText = await file.text()
+        const text = rawText.replace(/^\uFEFF/, '')
         rows = text
-          .split('\n')
+          .split(/\r?\n/)
           .filter(l => l.trim())
           .map(line => parseCSVLine(line))
       } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
@@ -741,6 +841,19 @@ export default function PicklistPage() {
         combo_skus: (row.comboSkus || []).filter(Boolean),
       }))
       await upsertSkuMappings(supabase, records)
+
+      // Auto-update live picklist items that were pushed with these portal SKUs
+      const picklistUpdated = await applyMappingsToLivePicklist(
+        supabase,
+        toSave.map(row => ({ portalSku: row.portalSku, masterSku: row.masterSku, comboSkus: row.comboSkus })),
+        data.userId
+      )
+      if (picklistUpdated) {
+        await fetchLiveItems(true)
+        if (shortUserId) {
+          supabase.channel(`picklist:${shortUserId}`).send({ type: 'broadcast', event: 'picklist_update', payload: {} })
+        }
+      }
       mutate('user-data')
     } catch (err) {
       setOrders(prevOrders)
@@ -802,6 +915,18 @@ export default function PicklistPage() {
       setAllMappings(prev => prev.map(m => mappingEdits[m.portalSku] ? { ...m, masterSku: mappingEdits[m.portalSku] } : m))
       setMappingEdits({})
       toast.success(`Saved ${records.length} mapping${records.length !== 1 ? 's' : ''}`)
+
+      const picklistUpdated = await applyMappingsToLivePicklist(
+        supabase,
+        records.map(r => ({ portalSku: r.portal_sku, masterSku: r.master_sku, comboSkus: r.combo_skus })),
+        data.userId
+      )
+      if (picklistUpdated) {
+        await fetchLiveItems(true)
+        if (shortUserId) {
+          supabase.channel(`picklist:${shortUserId}`).send({ type: 'broadcast', event: 'picklist_update', payload: {} })
+        }
+      }
       mutate('user-data')
     } catch {
       toast.error('Save failed')
@@ -894,6 +1019,18 @@ export default function PicklistPage() {
       setImportPreview([])
       setImportFile(null)
       await loadAllMappings()
+
+      const picklistUpdated = await applyMappingsToLivePicklist(
+        supabase,
+        toImport.map(r => ({ portalSku: r.portalSku, masterSku: r.masterSku })),
+        data.userId
+      )
+      if (picklistUpdated) {
+        await fetchLiveItems(true)
+        if (shortUserId) {
+          supabase.channel(`picklist:${shortUserId}`).send({ type: 'broadcast', event: 'picklist_update', payload: {} })
+        }
+      }
       mutate('user-data')
     } catch {
       toast.error('Import failed')
@@ -943,6 +1080,11 @@ export default function PicklistPage() {
       }
 
       toast.success(`Pushed ${json.pushed} SKUs to live picklist!`)
+
+      // Auto-clear the uploader and order data to prevent accidental duplicate pushes
+      setOrders([])
+      setUnmappedRows([])
+      setOrderFiles([])
     } catch (err) {
       toast.error('Failed to push picklist')
       console.error(err)
@@ -1118,8 +1260,8 @@ export default function PicklistPage() {
     )
   }
 
-  const mappedCount = orders.filter(o => o.Master_SKU).length
-  const unmappedCount = orders.filter(o => !o.Master_SKU).length
+  const mappedCount = orders.filter(o => o.Master_SKU && o.Master_SKU !== o.Portal_SKU).length
+  const unmappedCount = unmappedRows.length
   const isComboEnabled = data?.isComboEnabled ?? false
 
   // Live picklist stats
@@ -1450,15 +1592,19 @@ export default function PicklistPage() {
                   <span className="text-green-700 font-medium">{mappedCount} mapped</span>
                 </div>
                 {unmappedCount > 0 && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <AlertCircle className="h-4 w-4 text-amber-500" />
-                    <span className="text-amber-700 font-medium">{unmappedCount} unmapped</span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => unmappedSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                    className="flex items-center gap-2 text-sm rounded-md px-2 py-1 bg-amber-50 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
+                  >
+                    <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                    <span className="text-amber-700 font-medium">{unmappedCount} SKU unmapped — map karo ↓</span>
+                  </button>
                 )}
                 <div className="ml-auto flex items-center gap-2 flex-wrap">
                   <Button
                     onClick={handlePushToLive}
-                    disabled={mappedCount === 0 || isPushing}
+                    disabled={orders.length === 0 || isPushing}
                     className="bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     {isPushing ? (
@@ -1613,11 +1759,12 @@ export default function PicklistPage() {
         )}
 
         {unmappedRows.length > 0 && data && (
-          <Card>
+          <Card ref={unmappedSectionRef}>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-amber-500" />
                 New SKU Mapping
-                <Badge variant="outline">{unmappedRows.length} SKUs</Badge>
+                <Badge variant="outline" className="bg-amber-50 border-amber-300 text-amber-700">{unmappedRows.length} SKUs unmapped</Badge>
                 {isComboEnabled && (
                   <Badge variant="secondary" className="text-xs">Combo Mode</Badge>
                 )}
