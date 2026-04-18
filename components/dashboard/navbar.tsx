@@ -24,6 +24,7 @@ import {
   Lock,
   Scissors,
   CalendarDays,
+  Layers,
 } from 'lucide-react'
 
 import type { User as SupabaseUser } from '@supabase/supabase-js'
@@ -163,6 +164,12 @@ export function DashboardNavbar({ user, planData }: NavbarProps) {
                 >
                   <Lock className="mr-2 h-4 w-4 text-blue-500" />
                   <span>Costing Manager</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/master-sku">
+                    <Layers className="mr-2 h-4 w-4 text-purple-500" />
+                    Smart Master SKU
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link href="/dashboard/subscription">
