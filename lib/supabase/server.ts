@@ -34,7 +34,14 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
+              cookieStore.set(name, value, {
+                ...options,
+                // SameSite=None + Secure is required so cookies are sent
+                // when the app is embedded inside the Replit workspace iframe
+                // (cross-site context). Works on HTTPS in both dev and prod.
+                sameSite: 'none',
+                secure: true,
+              }),
             )
           } catch {
             // The "setAll" method was called from a Server Component.

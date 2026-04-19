@@ -22,23 +22,43 @@ function clearAuthCookies(response: NextResponse, request: NextRequest) {
 }
 
 /**
- * Filter out any sb- cookies whose values are truncated / invalid JSON.
+ * Filter out any sb- cookies whose values are truncated / invalid.
  * The Supabase library calls JSON.parse internally on cookie values — if a
  * cookie is corrupted it throws a SyntaxError that can bypass our try/catch
  * and crash the page with a 500. Stripping them here means Supabase never
  * sees bad data in the first place.
+ * Handles both raw JSON cookies ({...}) and base64-encoded chunk cookies.
  */
 function getSanitisedCookies(request: NextRequest) {
   return request.cookies.getAll().filter(({ name, value }) => {
     if (!name.startsWith('sb-')) return true
+    if (!value) return false
     const trimmed = value.trimStart()
-    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return true
-    try {
-      JSON.parse(value)
-      return true
-    } catch {
-      return false
+
+    // Raw JSON cookie — validate directly
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        JSON.parse(value)
+        return true
+      } catch {
+        return false
+      }
     }
+
+    // Base64-encoded chunk cookie (e.g. "base64-xxxxxx") — decode and validate
+    if (trimmed.startsWith('base64-')) {
+      try {
+        const b64 = trimmed.slice('base64-'.length)
+        const decoded = Buffer.from(b64, 'base64').toString('utf-8')
+        JSON.parse(decoded)
+        return true
+      } catch {
+        return false
+      }
+    }
+
+    // Any other format — allow through (don't block legitimate non-JSON values)
+    return true
   })
 }
 
@@ -78,7 +98,12 @@ export async function updateSession(request: NextRequest) {
             )
             supabaseResponse = NextResponse.next({ request })
             cookiesToSet.forEach(({ name, value, options }) =>
-              supabaseResponse.cookies.set(name, value, options),
+              supabaseResponse.cookies.set(name, value, {
+                ...options,
+                // SameSite=None + Secure needed for cross-site iframe (Replit workspace)
+                sameSite: 'none',
+                secure: true,
+              }),
             )
           },
         },

@@ -20,11 +20,11 @@ import {
   CreditCard,
   LogOut,
   ChevronDown,
-  AlertTriangle,
   Lock,
   Scissors,
   CalendarDays,
   Layers,
+  TrendingDown,
 } from 'lucide-react'
 
 import type { User as SupabaseUser } from '@supabase/supabase-js'
@@ -49,6 +49,7 @@ const navItems = [
   { title: 'Label Cropper', url: '/dashboard/label-cropper', icon: Scissors },
   { title: 'Flipkart Profit', url: '/dashboard/flipkart', icon: ShoppingBag },
   { title: 'Myntra Profit', url: '/dashboard/myntra', icon: Shirt },
+  { title: 'Profit Leakage', url: '/dashboard/profit-leakage', icon: TrendingDown },
 ]
 
 export function DashboardNavbar({ user, planData }: NavbarProps) {

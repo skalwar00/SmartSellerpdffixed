@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
-import { ArrowRight, PackageCheck, AlertTriangle, Archive, Smartphone, RefreshCw, Lock } from 'lucide-react'
+import { ArrowRight, PackageCheck, AlertTriangle, Archive, Smartphone, RefreshCw, Lock, TrendingDown, IndianRupee, Scale, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { BookDemoButton } from '@/components/book-demo-button'
 
@@ -45,6 +45,7 @@ export default async function LandingPage() {
           <nav className="hidden items-center gap-6 md:flex">
             <Link href="#how-it-works" className="text-sm text-muted-foreground transition-colors hover:text-foreground">How it works</Link>
             <Link href="#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Features</Link>
+            <Link href="#profit-leakage" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Profit Tools</Link>
             <Link href="#pricing" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Pricing</Link>
           </nav>
           <div className="flex items-center gap-2">
@@ -606,6 +607,228 @@ export default async function LandingPage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── Profit Leakage Tools ── */}
+      <section id="profit-leakage" className="border-t py-16 sm:py-24 bg-gradient-to-br from-slate-950 via-red-950 to-slate-900 text-white overflow-hidden">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+
+          {/* Section header */}
+          <div className="mx-auto max-w-2xl text-center mb-14">
+            <div className="inline-flex items-center gap-2 rounded-full bg-red-500/20 border border-red-500/30 px-4 py-1.5 text-xs font-semibold text-red-300 mb-4">
+              <TrendingDown className="h-3.5 w-3.5" />
+              Profit Leakage Tools
+            </div>
+            <h2 className="text-2xl font-bold tracking-tight sm:text-4xl">
+              Stop the silent money drain
+            </h2>
+            <p className="mt-4 text-base text-red-100/70">
+              Two powerful tools that scan your Flipkart reports and surface exactly where your profits are leaking — return misshipments and weight discrepancy settlements.
+            </p>
+          </div>
+
+          <div className="grid gap-12 lg:grid-cols-2">
+
+            {/* ─── Tool 1 — Return Profit Leakage ─── */}
+            <div className="flex flex-col gap-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/20 border border-red-500/30">
+                  <TrendingDown className="h-5 w-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Return Profit Leakage</h3>
+                  <p className="text-xs text-red-200/60">Detect Misshipment returns from your returns report</p>
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed text-red-100/70">
+                Upload your Flipkart returns XLSX. The tool auto-detects <span className="text-white font-semibold">Misshipment</span> return reasons and calculates exactly how much you&apos;re losing in return costs and missed profit — monthly and yearly.
+              </p>
+              <ul className="flex flex-col gap-2.5 text-sm">
+                {[
+                  'Auto-detects misshipment return rows — no manual filtering',
+                  'One-click copy on every flagged Order ID',
+                  'Monthly loss = return costs + lost upcoming profit',
+                  'Yearly projection to show the true annual impact',
+                ].map(t => (
+                  <li key={t} className="flex items-start gap-2.5">
+                    <span className="h-4 w-4 rounded-full bg-red-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-400 inline-block" />
+                    </span>
+                    <span className="text-red-100/80">{t}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Return tool mockup */}
+              <div className="rounded-2xl border border-red-500/20 bg-white/5 backdrop-blur-sm overflow-hidden shadow-2xl">
+                {/* Collapsed uploader header */}
+                <div className="border-b border-white/10 px-4 py-3 flex items-center justify-between bg-white/5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-7 w-7 rounded-lg bg-red-500/20 flex items-center justify-center">
+                      <TrendingDown className="h-3.5 w-3.5 text-red-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-white">Returns Report Upload</p>
+                      <p className="text-[10px] text-emerald-400 font-medium">returns_june.xlsx · Sheet: Returns · 12 misshipment orders found</p>
+                    </div>
+                  </div>
+                  <span className="text-white/40 text-[10px]">▼</span>
+                </div>
+
+                {/* Stats row */}
+                <div className="grid grid-cols-3 gap-px bg-white/5">
+                  {[
+                    { label: 'Total Returns', val: '84', color: 'text-white' },
+                    { label: 'Misshipments', val: '12', color: 'text-red-400' },
+                    { label: 'Affected SKUs', val: '5', color: 'text-orange-400' },
+                  ].map(s => (
+                    <div key={s.label} className="bg-white/5 px-3 py-3 text-center">
+                      <p className={`text-lg font-black ${s.color}`}>{s.val}</p>
+                      <p className="text-[10px] text-white/40">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Orders list */}
+                <div className="p-3 space-y-1.5">
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-white/30 px-1 mb-2">Misshipment Orders</p>
+                  {[
+                    { id: 'OD123456789012', sku: 'KURTA-BLU-M' },
+                    { id: 'OD987654321098', sku: 'PALAZZO-BLK-L' },
+                    { id: 'OD112233445566', sku: 'DUPATTA-RED-FS' },
+                  ].map((o, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2">
+                      <span className="text-[10px] text-white/30 w-4 shrink-0">{i + 1}</span>
+                      <span className="flex-1 text-[10px] font-mono text-white/80">{o.id}</span>
+                      <span className="text-[10px] text-white/50 truncate max-w-[80px]">{o.sku}</span>
+                      <div className="flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5">
+                        <Copy className="h-2.5 w-2.5 text-white/40" />
+                        <span className="text-[9px] text-white/40">Copy</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Calculator */}
+                <div className="border-t border-white/10 p-3 bg-white/5">
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-white/30 mb-2">Loss Calculator</p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { label: 'Return Cost Loss', val: '₹3,600', red: true },
+                      { label: 'Lost Profit', val: '₹12,000', red: true },
+                      { label: 'Monthly Loss', val: '₹15,600', red: true, bold: true },
+                      { label: 'Yearly Projection', val: '₹1,87,200', red: true, bold: true },
+                    ].map(c => (
+                      <div key={c.label} className={`rounded-lg px-2.5 py-2 ${c.bold ? 'bg-red-500/20 border border-red-500/30' : 'bg-white/5'}`}>
+                        <p className="text-[9px] text-white/40">{c.label}</p>
+                        <p className={`text-sm font-black ${c.bold ? 'text-red-400' : 'text-white/70'}`}>{c.val}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ─── Tool 2 — Weight Discrepancy Analyzer ─── */}
+            <div className="flex flex-col gap-6">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/30">
+                  <Scale className="h-5 w-5 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Weight Discrepancy Analyzer</h3>
+                  <p className="text-xs text-amber-200/60">Identify orders where Flipkart is paying you less</p>
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed text-red-100/70">
+                Upload your Flipkart orders P&amp;L report and instantly see which orders have a <span className="text-white font-semibold">weight discrepancy</span> — so you can take action before the losses pile up.
+              </p>
+              <ul className="flex flex-col gap-2.5 text-sm">
+                {[
+                  'Works with your existing Flipkart orders export — no setup needed',
+                  'Instantly lists every affected order with SKU and quantity',
+                  'One-click copy on every Order ID for quick Seller Hub ticket filing',
+                  'Shows total monthly and yearly financial impact at a glance',
+                ].map(t => (
+                  <li key={t} className="flex items-start gap-2.5">
+                    <span className="h-4 w-4 rounded-full bg-amber-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />
+                    </span>
+                    <span className="text-red-100/80">{t}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Weight discrepancy tool mockup */}
+              <div className="rounded-2xl border border-amber-500/20 bg-white/5 backdrop-blur-sm overflow-hidden shadow-2xl">
+                {/* Collapsed uploader header */}
+                <div className="border-b border-white/10 px-4 py-3 flex items-center justify-between bg-white/5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-7 w-7 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                      <Scale className="h-3.5 w-3.5 text-amber-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-white">Orders Report Upload</p>
+                      <p className="text-[10px] text-emerald-400 font-medium">orders_june.xlsx · Sheet: Sheet1 · 9 discrepancy orders found</p>
+                    </div>
+                  </div>
+                  <span className="text-white/40 text-[10px]">▼</span>
+                </div>
+
+                {/* Loss summary */}
+                <div className="grid grid-cols-3 gap-px bg-white/5">
+                  {[
+                    { label: 'Affected Units', val: '31', color: 'text-white' },
+                    { label: 'Monthly Loss', val: '₹1,850', color: 'text-amber-400' },
+                    { label: 'Yearly Loss', val: '₹22,200', color: 'text-red-400' },
+                  ].map(s => (
+                    <div key={s.label} className="bg-white/5 px-3 py-3 text-center">
+                      <p className={`text-lg font-black ${s.color}`}>{s.val}</p>
+                      <p className="text-[10px] text-white/40">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Orders list */}
+                <div className="p-3 space-y-1.5">
+                  <p className="text-[9px] font-semibold uppercase tracking-widest text-white/30 px-1 mb-2">Discrepancy Orders</p>
+                  {[
+                    { id: 'OD556677889900', sku: 'KURTA-BLU-M', qty: 4 },
+                    { id: 'OD334455667788', sku: 'TOP-WHT-S', qty: 3 },
+                    { id: 'OD221100998877', sku: 'LEHENGA-GRN-M', qty: 2 },
+                  ].map((o, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg bg-white/5 px-3 py-2">
+                      <span className="text-[10px] text-white/30 w-4 shrink-0">{i + 1}</span>
+                      <span className="flex-1 text-[10px] font-mono text-white/80">{o.id}</span>
+                      <span className="text-[10px] text-white/50 truncate max-w-[80px] hidden sm:block">{o.sku}</span>
+                      <span className="text-[10px] font-bold text-red-400">×{o.qty}</span>
+                      <div className="flex items-center gap-1 rounded bg-white/10 px-1.5 py-0.5">
+                        <Copy className="h-2.5 w-2.5 text-white/40" />
+                        <span className="text-[9px] text-white/40">Copy</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Action banner */}
+                <div className="border-t border-white/10 mx-3 mb-3 mt-1 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 flex items-start gap-2">
+                  <IndianRupee className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-amber-200/80 font-medium">Raise a ticket on Flipkart Seller Hub for these orders to prevent future loss.</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* CTA row */}
+          <div className="mt-14 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link href="/auth/sign-up" className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-lg transition hover:bg-red-50 active:scale-95">
+              Start detecting leakage free <ArrowRight className="h-4 w-4" />
+            </Link>
+            <p className="text-xs text-white/40">No credit card · 14-day trial</p>
+          </div>
+
         </div>
       </section>
 
