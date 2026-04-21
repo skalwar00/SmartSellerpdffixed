@@ -7,13 +7,14 @@ const SIZES_DETECT = [
   'FREESIZE', 'FREE-SIZE', 'FREESZ',
   'XXXXL', 'XXXL', '10XL', '9XL', '8XL', '7XL', '6XL', '5XL', '4XL', '3XL', 'XXL', '2XL', 'XL',
   'FS', 'XS', 'L', 'M', 'S',
-  '48', '46', '44', '42', '40', '38', '36', '34', '32', '30', '28', '26',
+  '60', '58', '56', '54', '52', '50', '48', '46', '44', '42', '40', '38', '36', '34', '32', '30', '28', '26',
 ]
 
-// Display order for sizes in the UI
+// Display order for sizes in the UI: FREESIZE first, then XS→10XL, then numeric sizes
 export const SIZE_CATALOG = [
-  'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', '9XL', '10XL', 'FREESIZE',
-  '26', '28', '30', '32', '34', '36', '38', '40', '42', '44', '46', '48',
+  'FREESIZE', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL',
+  '4XL', '5XL', '6XL', '7XL', '8XL', '9XL', '10XL',
+  '26', '28', '30', '32', '34', '36', '38', '40', '42', '44', '46', '48', '50', '52', '54', '56', '58', '60',
 ]
 
 function extractBaseAndSize(sku: string): { base: string; size: string } | null {
@@ -24,6 +25,15 @@ function extractBaseAndSize(sku: string): { base: string; size: string } | null 
       const base = sku.slice(0, baseEnd).replace(/[-_]+$/, '') // strip any trailing separators
       return { base, size: sz.toUpperCase() }
     }
+  }
+  // Fallback: 1-3 digit numeric suffix (covers shoe sizes, kids sizes, waist 50/52, etc.
+  // not in the static list). Capped at 3 digits to avoid stripping style numbers like "STYLE-1234".
+  const numericMatch = upper.match(/[-_](\d{1,3})$/)
+  if (numericMatch) {
+    const sz = numericMatch[1]
+    const baseEnd = sku.length - sz.length - 1
+    const base = sku.slice(0, baseEnd).replace(/[-_]+$/, '')
+    return { base, size: sz }
   }
   return null
 }
@@ -40,7 +50,8 @@ function skuTokens(sku: string): string[] {
     .toUpperCase()
     .split(/[-_\s]+/)
     .map(t => t.trim())
-    .filter(t => t && !SIZES_DETECT.includes(t))
+    // Filter out known sizes AND any short numeric token (1-3 digits) that's likely a size
+    .filter(t => t && !SIZES_DETECT.includes(t) && !/^\d{1,3}$/.test(t))
 }
 
 function styleNumber(token: string | undefined): string {
@@ -359,11 +370,19 @@ export async function POST(request: Request) {
         }
       }
 
-      // Sort sizes in display order
+      // Sort sizes in display order. Unknown numeric sizes (e.g. 50, 52, kids 6/8/10)
+      // are sorted by their numeric value at the end of the list.
       const sortedSizes = group.sizes.sort((a, b) => {
         const ai = SIZE_CATALOG.indexOf(a)
         const bi = SIZE_CATALOG.indexOf(b)
-        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+        const aRank = ai === -1 ? 999 : ai
+        const bRank = bi === -1 ? 999 : bi
+        if (aRank !== bRank) return aRank - bRank
+        // Both unknown — fall back to numeric or alphabetic ordering
+        const an = parseInt(a, 10)
+        const bn = parseInt(b, 10)
+        if (!isNaN(an) && !isNaN(bn)) return an - bn
+        return a.localeCompare(b)
       })
 
       designs.push({

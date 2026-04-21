@@ -583,31 +583,54 @@ export default function PicklistPage() {
     const allOrders: OrderData[] = []
 
     try {
+      // Shared row processor — same logic for CSV and XLSX rows
+      const processRows = (headers: string[], dataRows: string[][], fileName: string): boolean => {
+        const skuIndex = findSkuColumn(headers)
+        const qtyIndex = findQtyColumn(headers)
+        if (skuIndex === -1) { toast.error(`SKU column not found in ${fileName}`); return false }
+        for (const cols of dataRows) {
+          if (cols[skuIndex]) {
+            const skuVal = String(cols[skuIndex]).trim().toUpperCase().replace(/"/g, '')
+            // Skip values that look like dates/timestamps (mis-detection guard)
+            const looksLikeDate = /^\d{4}[-\/\s]\d{2}[-\/\s]\d{2}/.test(skuVal) || /^\d{2}[-\/]\d{2}[-\/]\d{4}/.test(skuVal) || /^\d{4}\s+\d{1,2}:\d{2}/.test(skuVal)
+            let qtyVal = 1
+            if (qtyIndex !== -1 && cols[qtyIndex] != null && cols[qtyIndex] !== '') {
+              const parsed = parseInt(String(cols[qtyIndex]).replace(/"/g, ''), 10)
+              if (!isNaN(parsed)) qtyVal = parsed
+            }
+            if (skuVal && !looksLikeDate) allOrders.push({ Portal_SKU: skuVal, Qty: qtyVal })
+          }
+        }
+        return true
+      }
+
       for (const file of files) {
-        if (file.name.endsWith('.csv')) {
+        const lowerName = file.name.toLowerCase()
+        if (lowerName.endsWith('.csv')) {
           const rawText = await file.text()
           const text = rawText.replace(/^\uFEFF/, '')
           const lines = text.split(/\r?\n/).filter(l => l.trim())
           if (lines.length === 0) { toast.error(`Empty file: ${file.name}`); continue }
           const headers = parseCSVLine(lines[0]).map(h => h.trim())
-          const skuIndex = findSkuColumn(headers)
-          const qtyIndex = findQtyColumn(headers)
-          if (skuIndex === -1) { toast.error(`SKU column not found in ${file.name}`); continue }
-          for (let i = 1; i < lines.length; i++) {
-            const cols = parseCSVLine(lines[i])
-            if (cols[skuIndex]) {
-              const skuVal = cols[skuIndex].trim().toUpperCase().replace(/"/g, '')
-              // Skip values that look like dates/timestamps (mis-detection guard)
-              const looksLikeDate = /^\d{4}[-\/\s]\d{2}[-\/\s]\d{2}/.test(skuVal) || /^\d{2}[-\/]\d{2}[-\/]\d{4}/.test(skuVal) || /^\d{4}\s+\d{1,2}:\d{2}/.test(skuVal)
-              let qtyVal = 1
-              if (qtyIndex !== -1 && cols[qtyIndex]) {
-                const parsed = parseInt(cols[qtyIndex].replace(/"/g, ''), 10)
-                if (!isNaN(parsed)) qtyVal = parsed
-              }
-              if (skuVal && !looksLikeDate) allOrders.push({ Portal_SKU: skuVal, Qty: qtyVal })
-            }
+          const dataRows = lines.slice(1).map(parseCSVLine)
+          processRows(headers, dataRows, file.name)
+        } else if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls')) {
+          try {
+            const buffer = await file.arrayBuffer()
+            const wb = XLSX.read(buffer, { type: 'array' })
+            const sheetName = wb.SheetNames[0]
+            if (!sheetName) { toast.error(`Empty workbook: ${file.name}`); continue }
+            const sheet = wb.Sheets[sheetName]
+            const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: '' })
+            if (!rows.length) { toast.error(`Empty sheet in ${file.name}`); continue }
+            const headers = (rows[0] as unknown[]).map(h => String(h ?? '').trim())
+            const dataRows = (rows.slice(1) as unknown[][]).map(r => r.map(c => String(c ?? '')))
+            processRows(headers, dataRows, file.name)
+          } catch (err) {
+            toast.error(`Failed to read Excel file: ${file.name}`)
+            console.error(err)
           }
-        } else if (file.name.endsWith('.pdf')) {
+        } else if (lowerName.endsWith('.pdf')) {
           const formData = new FormData()
           formData.append('file', file)
           const res = await fetch('/api/parse-pdf', { method: 'POST', body: formData })
@@ -617,6 +640,8 @@ export default function PicklistPage() {
           } else {
             toast.error(`Failed to parse ${file.name}`)
           }
+        } else {
+          toast.error(`Unsupported file type: ${file.name}`)
         }
       }
 
@@ -1566,18 +1591,18 @@ export default function PicklistPage() {
               Upload Orders
             </CardTitle>
             <CardDescription>
-              Upload Flipkart CSV, Myntra CSV, or Meesho PDF files
+              Upload Flipkart CSV/XLSX, Myntra CSV/XLSX, or Meesho PDF files
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <FileDropzone
-              accept=".csv,.pdf"
+              accept=".csv,.xlsx,.xls,.pdf"
               multiple
               files={orderFiles}
               onFilesChange={handleOrderFilesChange}
               disabled={isLoading || isProcessingOrders}
               label="Drop order files here or click to browse"
-              hint="Supports Flipkart CSV, Myntra CSV, and Meesho PDF"
+              hint="Supports Flipkart/Myntra CSV or XLSX/XLS, and Meesho PDF"
             />
             {isProcessingOrders && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

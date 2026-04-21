@@ -13,10 +13,56 @@ import { Badge } from '@/components/ui/badge'
 import { DashboardHeader } from '@/components/dashboard/sidebar'
 
 const SIZE_CATALOG = [
-  'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL', '7XL', '8XL', '9XL', '10XL', 'FREESIZE',
-  '26', '28', '30', '32', '34', '36', '38', '40', '42', '44', '46', '48',
+  'FREESIZE', 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL',
+  '4XL', '5XL', '6XL', '7XL', '8XL', '9XL', '10XL',
+  '26', '28', '30', '32', '34', '36', '38', '40', '42', '44', '46', '48', '50', '52', '54', '56', '58', '60',
 ]
-const DEFAULT_VISIBLE_SIZE_COUNT = SIZE_CATALOG.indexOf('4XL') + 1
+// Default: FREESIZE → 3XL visible; two separate "+" buttons reveal letter (4XL→10XL) and numeric (26→48) one-by-one
+const DEFAULT_VISIBLE_SIZE_COUNT = SIZE_CATALOG.indexOf('3XL') + 1
+const LETTER_TIER_END = SIZE_CATALOG.indexOf('10XL') + 1 // end of letter sizes (exclusive)
+const LETTER_OPTIONAL = SIZE_CATALOG.slice(DEFAULT_VISIBLE_SIZE_COUNT, LETTER_TIER_END) // 4XL..10XL
+const NUMERIC_OPTIONAL = SIZE_CATALOG.slice(LETTER_TIER_END) // 26..48
+
+interface SizeReveal { letter: number; numeric: number }
+const EMPTY_REVEAL: SizeReveal = { letter: 0, numeric: 0 }
+
+// Size families — auto range-fill only happens within the same family
+function sizeFamily(sz: string): 'free' | 'letter' | 'numeric' | 'unknown' {
+  if (sz === 'FREESIZE') return 'free'
+  if (/^\d/.test(sz)) return 'numeric'
+  if (SIZE_CATALOG.indexOf(sz) > 0 && sz !== 'FREESIZE') return 'letter'
+  return 'unknown'
+}
+
+/**
+ * Range-fill selection: if a size is clicked while another is already selected
+ * in the same family (letter or numeric), all sizes in between are auto-selected.
+ * Toggling OFF an already-selected size only removes that single size.
+ */
+function expandRangeSelection(current: string[], newSize: string): string[] {
+  if (current.includes(newSize)) return current.filter(s => s !== newSize)
+
+  const newIdx = SIZE_CATALOG.indexOf(newSize)
+  if (newIdx < 0) return [...current, newSize]
+
+  const newFamily = sizeFamily(newSize)
+  if (newFamily === 'free' || newFamily === 'unknown') return [...current, newSize]
+
+  // Find the closest already-selected anchor in the same family
+  const anchors = current
+    .map(s => ({ s, i: SIZE_CATALOG.indexOf(s) }))
+    .filter(({ s, i }) => i >= 0 && sizeFamily(s) === newFamily)
+
+  if (anchors.length === 0) return [...current, newSize]
+
+  const anchor = anchors.reduce((a, b) =>
+    Math.abs(a.i - newIdx) <= Math.abs(b.i - newIdx) ? a : b
+  )
+  const lo = Math.min(anchor.i, newIdx)
+  const hi = Math.max(anchor.i, newIdx)
+  const fill = SIZE_CATALOG.slice(lo, hi + 1).filter(s => sizeFamily(s) === newFamily)
+  return Array.from(new Set([...current, ...fill]))
+}
 
 const SIZES_DETECT_CLIENT = [
   'FREESIZE', 'FREE-SIZE', 'FREESZ',
@@ -77,7 +123,7 @@ export default function SmartMasterSkuPage() {
   const [designs, setDesigns] = useState<DesignGroup[]>([])
   const [parseStats, setParseStats] = useState<{ totalSkus: number; newCount: number; skuColumn: string; imageColumn: string | null; sampleSkus: string[] } | null>(null)
   const [designActions, setDesignActions] = useState<Record<string, DesignAction>>({})
-  const [extraVisibleSizeCounts, setExtraVisibleSizeCounts] = useState<Record<string, number>>({})
+  const [extraVisibleSizeCounts, setExtraVisibleSizeCounts] = useState<Record<string, SizeReveal>>({})
   const [expandedDesign, setExpandedDesign] = useState<string | null>(null)
   const [isSavingAll, setIsSavingAll] = useState(false)
 
@@ -98,7 +144,7 @@ export default function SmartMasterSkuPage() {
   const [manualSelectedSizes, setManualSelectedSizes] = useState<string[]>([])
   const [manualImageUrl, setManualImageUrl] = useState('')
   const [isSavingManual, setIsSavingManual] = useState(false)
-  const [manualExtraVisible, setManualExtraVisible] = useState(0)
+  const [manualExtraVisible, setManualExtraVisible] = useState<SizeReveal>(EMPTY_REVEAL)
 
   const fetchInventory = useCallback(async () => {
     setIsLoadingInventory(true)
@@ -214,12 +260,20 @@ export default function SmartMasterSkuPage() {
 
   const toggleSize = (baseSku: string, size: string) => {
     const current = designActions[baseSku]?.selectedSizes || []
-    const next = current.includes(size) ? current.filter(s => s !== size) : [...current, size]
-    setAction(baseSku, { selectedSizes: next })
+    setAction(baseSku, { selectedSizes: expandRangeSelection(current, size) })
   }
 
-  const showNextSize = (baseSku: string) => {
-    setExtraVisibleSizeCounts(prev => ({ ...prev, [baseSku]: (prev[baseSku] || 0) + 1 }))
+  const showNextLetterSize = (baseSku: string) => {
+    setExtraVisibleSizeCounts(prev => {
+      const cur = prev[baseSku] || EMPTY_REVEAL
+      return { ...prev, [baseSku]: { ...cur, letter: Math.min(cur.letter + 1, LETTER_OPTIONAL.length) } }
+    })
+  }
+  const showNextNumericSize = (baseSku: string) => {
+    setExtraVisibleSizeCounts(prev => {
+      const cur = prev[baseSku] || EMPTY_REVEAL
+      return { ...prev, [baseSku]: { ...cur, numeric: Math.min(cur.numeric + 1, NUMERIC_OPTIONAL.length) } }
+    })
   }
 
   const handleSaveAll = async () => {
@@ -375,7 +429,7 @@ export default function SmartMasterSkuPage() {
       setManualBaseSku('')
       setManualSelectedSizes([])
       setManualImageUrl('')
-      setManualExtraVisible(0)
+      setManualExtraVisible(EMPTY_REVEAL)
       await fetchInventory()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Create failed')
@@ -592,17 +646,18 @@ export default function SmartMasterSkuPage() {
               {newDesigns.map(design => {
                 const act = designActions[design.baseSku] || { action: 'create', selectedSizes: design.sizes, linkedMasterSku: '', imageUrl: design.imageUrl }
                 const isExpanded = expandedDesign === design.baseSku
-                const extraVisibleCount = extraVisibleSizeCounts[design.baseSku] || 0
+                const reveal = extraVisibleSizeCounts[design.baseSku] || EMPTY_REVEAL
                 const defaultSizes = SIZE_CATALOG.slice(0, DEFAULT_VISIBLE_SIZE_COUNT)
-                const optionalSizes = SIZE_CATALOG.slice(DEFAULT_VISIBLE_SIZE_COUNT)
                 const visibleSizeSet = new Set([
                   ...defaultSizes,
-                  ...optionalSizes.slice(0, extraVisibleCount),
+                  ...LETTER_OPTIONAL.slice(0, reveal.letter),
+                  ...NUMERIC_OPTIONAL.slice(0, reveal.numeric),
                   ...design.sizes,
                   ...act.selectedSizes,
                 ])
                 const visibleSizes = SIZE_CATALOG.filter(sz => visibleSizeSet.has(sz))
-                const nextSizeToShow = optionalSizes.find(sz => !visibleSizeSet.has(sz))
+                const nextLetterSize = LETTER_OPTIONAL.find(sz => !visibleSizeSet.has(sz))
+                const nextNumericSize = NUMERIC_OPTIONAL.find(sz => !visibleSizeSet.has(sz))
 
                 return (
                   <div key={design.baseSku} className="px-5 py-4">
@@ -681,7 +736,8 @@ export default function SmartMasterSkuPage() {
                         {/* Expanded: size selector (create) or master SKU input (link) */}
                         {act.action === 'create' && (
                           <div className="mt-3 rounded-lg bg-gray-50 border border-gray-100 p-3">
-                            <p className="text-xs font-medium text-gray-600 mb-2">Select sizes to create in Master Inventory:</p>
+                            <p className="text-xs font-medium text-gray-600 mb-1">Select sizes to create in Master Inventory:</p>
+                            <p className="text-[10px] text-gray-400 mb-2">Tip: click two sizes — the ones in between will auto-select.</p>
                             <div className="flex flex-wrap gap-1.5">
                               {visibleSizes.map(sz => {
                                 const isDetected = design.sizes.includes(sz)
@@ -703,19 +759,29 @@ export default function SmartMasterSkuPage() {
                                   </button>
                                 )
                               })}
-                              {nextSizeToShow && (
+                              {nextLetterSize && (
                                 <button
-                                  onClick={() => showNextSize(design.baseSku)}
+                                  onClick={() => showNextLetterSize(design.baseSku)}
                                   className="rounded-md px-2 py-1 text-xs font-medium border border-dashed border-gray-300 bg-white text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all"
-                                  title={`Show ${nextSizeToShow}`}
+                                  title={`Show ${nextLetterSize}`}
                                 >
                                   <Plus className="inline h-3 w-3 mr-1" />
-                                  {nextSizeToShow}
+                                  {nextLetterSize}
+                                </button>
+                              )}
+                              {nextNumericSize && (
+                                <button
+                                  onClick={() => showNextNumericSize(design.baseSku)}
+                                  className="rounded-md px-2 py-1 text-xs font-medium border border-dashed border-gray-300 bg-white text-gray-500 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                                  title={`Show ${nextNumericSize}`}
+                                >
+                                  <Plus className="inline h-3 w-3 mr-1" />
+                                  {nextNumericSize}
                                 </button>
                               )}
                             </div>
                             <p className="mt-2 text-xs text-gray-400">
-                              Sizes show up to 4XL by default · Use + to add more · Orange border = detected in file · Blue = will be created
+                              Sizes show up to 3XL by default · Use + buttons to add XL or numeric sizes · Orange border = detected in file · Blue = will be created
                               {act.selectedSizes.length > 0 && ` · ${act.selectedSizes.length} sizes selected`}
                             </p>
                           </div>
@@ -791,10 +857,15 @@ export default function SmartMasterSkuPage() {
         {/* ── Section 2b: Manual Master SKU Creator ────────────────────────── */}
         {(() => {
           const defaultSizes = SIZE_CATALOG.slice(0, DEFAULT_VISIBLE_SIZE_COUNT)
-          const optionalSizes = SIZE_CATALOG.slice(DEFAULT_VISIBLE_SIZE_COUNT)
-          const visibleOptional = optionalSizes.slice(0, manualExtraVisible)
-          const visibleSizes = [...defaultSizes, ...visibleOptional]
-          const nextSize = optionalSizes.find(sz => !visibleSizes.includes(sz))
+          const visibleSet = new Set([
+            ...defaultSizes,
+            ...LETTER_OPTIONAL.slice(0, manualExtraVisible.letter),
+            ...NUMERIC_OPTIONAL.slice(0, manualExtraVisible.numeric),
+            ...manualSelectedSizes,
+          ])
+          const visibleSizes = SIZE_CATALOG.filter(sz => visibleSet.has(sz))
+          const manualNextLetter = LETTER_OPTIONAL.find(sz => !visibleSet.has(sz))
+          const manualNextNumeric = NUMERIC_OPTIONAL.find(sz => !visibleSet.has(sz))
           const currentBase = manualBaseSku.trim().toUpperCase().replace(/[-_]+$/, '')
           const existingInventorySet = new Set(inventory.map(i => i.master_sku.toUpperCase()))
           const existingSizes = new Set(SIZE_CATALOG.filter(sz => existingInventorySet.has(`${currentBase}-${sz}`)))
@@ -830,7 +901,8 @@ export default function SmartMasterSkuPage() {
 
                 {/* Size selector */}
                 <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-700">Sizes Select Karo</p>
+                  <p className="text-xs font-medium text-gray-700">Select Sizes</p>
+                  <p className="text-[10px] text-gray-400 -mt-1">Tip: click two sizes — the ones in between will auto-select.</p>
                   <div className="flex flex-wrap gap-1.5">
                     {visibleSizes.map(sz => {
                       const isSelected = manualSelectedSizes.includes(sz)
@@ -838,9 +910,7 @@ export default function SmartMasterSkuPage() {
                       return (
                         <button
                           key={sz}
-                          onClick={() => setManualSelectedSizes(prev =>
-                            isSelected ? prev.filter(s => s !== sz) : [...prev, sz]
-                          )}
+                          onClick={() => setManualSelectedSizes(prev => expandRangeSelection(prev, sz))}
                           title={alreadyExists ? `${currentBase}-${sz} already exists in inventory` : undefined}
                           className={`rounded-md px-2.5 py-1 text-xs font-medium border transition-all ${
                             alreadyExists
@@ -854,12 +924,22 @@ export default function SmartMasterSkuPage() {
                         </button>
                       )
                     })}
-                    {nextSize && (
+                    {manualNextLetter && (
                       <button
-                        onClick={() => setManualExtraVisible(v => v + 1)}
+                        onClick={() => setManualExtraVisible(v => ({ ...v, letter: Math.min(v.letter + 1, LETTER_OPTIONAL.length) }))}
+                        title={`Show ${manualNextLetter}`}
                         className="rounded-md px-2.5 py-1 text-xs font-medium border border-dashed border-gray-300 bg-white text-gray-500 hover:border-violet-300 hover:text-violet-600 transition-all"
                       >
-                        <Plus className="inline h-3 w-3 mr-1" />{nextSize}
+                        <Plus className="inline h-3 w-3 mr-1" />{manualNextLetter}
+                      </button>
+                    )}
+                    {manualNextNumeric && (
+                      <button
+                        onClick={() => setManualExtraVisible(v => ({ ...v, numeric: Math.min(v.numeric + 1, NUMERIC_OPTIONAL.length) }))}
+                        title={`Show ${manualNextNumeric}`}
+                        className="rounded-md px-2.5 py-1 text-xs font-medium border border-dashed border-gray-300 bg-white text-gray-500 hover:border-violet-300 hover:text-violet-600 transition-all"
+                      >
+                        <Plus className="inline h-3 w-3 mr-1" />{manualNextNumeric}
                       </button>
                     )}
                     {manualSelectedSizes.length > 0 && (
