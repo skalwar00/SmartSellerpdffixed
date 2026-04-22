@@ -229,10 +229,13 @@ function getSkuFromRowPrefix(value: string) {
     if (sku && sku.length >= 4 && /[A-Z]/.test(sku)) return sku
   }
   // Merged 1-digit serial + digit-starting SKU where the SKU itself has 4+ leading digits:
-  // e.g. "11048_GREEN_L" → serial "1" + SKU "1048_GREEN_L".
+  //   "11048_GREEN_L"     → serial "1" + SKU "1048_GREEN_L"   (digits → separator)
+  //   "15010B-GREEN-XL"   → serial "1" + SKU "5010B-GREEN-XL" (digits → letter → separator)
+  //   "24960B-ORANGE-XL"  → serial "2" + SKU "4960B-ORANGE-XL"
+  // The optional [A-Z]+ between digits and separator handles the digits-then-letter case.
   // Using \d{4,} in the capture ensures we don't misfire on standalone SKUs like
   // "7001-Black-L" (stripping "7" would leave only 3 digits "001", which fails \d{4,}).
-  const mergedDigitSerialMatch = value.match(/^\s*\d(\d{4,}[_.-][A-Za-z][A-Za-z0-9_.-]*)\s*$/i)
+  const mergedDigitSerialMatch = value.match(/^\s*\d(\d{4,}[A-Z]*[_.\-/][A-Za-z0-9][A-Za-z0-9_.\-/]*)\s*$/i)
   if (mergedDigitSerialMatch?.[1]) {
     const sku = rawLabelTextToSku(mergedDigitSerialMatch[1])
     if (sku && sku.length >= 4) return sku

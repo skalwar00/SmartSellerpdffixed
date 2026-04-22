@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { migrateUserMetadata } from '@/lib/supabase/migrate-user-metadata'
 import { redirect } from 'next/navigation'
 
 export async function loginAction(prevState: { error: string | null }, formData: FormData) {
@@ -12,7 +13,7 @@ export async function loginAction(prevState: { error: string | null }, formData:
   }
 
   const supabase = await createClient()
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
   if (error) {
     const msg = error.message
@@ -26,6 +27,18 @@ export async function loginAction(prevState: { error: string | null }, formData:
       return { error: 'Incorrect email or password.' }
     }
     return { error: msg }
+  }
+
+  // Strip large legacy fields from the JWT immediately on login so the
+  // session cookie never grows beyond ~14KB and trips the middleware's
+  // size-guard (which would otherwise bounce the user back to /auth/login
+  // in an infinite loop). Safe no-op for users that have already migrated.
+  if (data?.user) {
+    try {
+      await migrateUserMetadata(supabase, data.user.id, data.user.user_metadata ?? {})
+    } catch {
+      // best-effort — never block login
+    }
   }
 
   redirect('/dashboard')

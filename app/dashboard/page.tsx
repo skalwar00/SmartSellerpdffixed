@@ -441,6 +441,27 @@ export default function PicklistPage() {
     return true
   }
 
+  const handleResetLabelUnmapped = async () => {
+    if (labelUnmappedRows.length === 0) return
+    const ok = window.confirm('Saari unmapped SKUs hata di jayengi. Sure?')
+    if (!ok) return
+    const supabase = createClient()
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+      const { error } = await supabase
+        .from('users_plan')
+        .update({ pending_unmapped_skus: [] })
+        .eq('user_id', user.id)
+      if (error) throw error
+      setLabelUnmappedRows([])
+      mutate('user-data')
+      toast.success('Unmapped SKUs reset ho gayi')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Reset failed')
+    }
+  }
+
   const handleSaveLabelMappings = async () => {
     const supabase = createClient()
     const toSave = labelUnmappedRows.filter(r => r.masterSku.trim())
@@ -1660,8 +1681,17 @@ export default function PicklistPage() {
 
         {labelUnmappedRows.length > 0 && data && (
           <Card className="border-amber-200">
-            <CardHeader className="bg-amber-50/60">
-              <CardTitle className="text-base flex items-center gap-2">
+            <CardHeader className="bg-amber-50/60 relative">
+              <button
+                type="button"
+                onClick={handleResetLabelUnmapped}
+                title="Reset — saari unmapped SKUs hata do"
+                className="absolute right-3 top-3 flex h-7 items-center gap-1 rounded-md border border-amber-300 bg-white/70 px-2 text-[11px] font-medium text-amber-700 transition-colors hover:bg-amber-100 hover:text-amber-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              >
+                <Trash2 className="h-3 w-3" />
+                Reset
+              </button>
+              <CardTitle className="text-base flex items-center gap-2 pr-20">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 Label Cropper — Unmapped SKUs
                 <Badge variant="outline" className="border-amber-300 text-amber-700">{labelUnmappedRows.length} SKUs</Badge>
