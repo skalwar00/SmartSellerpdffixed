@@ -83,7 +83,30 @@ function stripLabelPrefix(val: string): string {
 
 // ── File parser ────────────────────────────────────────────────────────────────
 
-function parseFile(file: File): Promise<{ rows: string[][]; sheetName: string; error?: string }> {
+// Flipkart's Returns export sets <dimension ref="A1:AD1"/> even when thousands
+// of data rows exist below. SheetJS trusts that declared range, so it returns
+// only the header row. This recomputes the true range from actual cell keys
+// and rewrites !ref so sheet_to_json reads every row.
+function repairSheetRange(ws: XLSX.WorkSheet): boolean {
+  const keys = Object.keys(ws).filter(k => !k.startsWith('!'))
+  if (keys.length === 0) return false
+  let maxRow = 0
+  let maxCol = 0
+  for (const k of keys) {
+    const addr = XLSX.utils.decode_cell(k)
+    if (addr.r > maxRow) maxRow = addr.r
+    if (addr.c > maxCol) maxCol = addr.c
+  }
+  const trueRef = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxRow, c: maxCol } })
+  const declared = ws['!ref']
+  if (declared !== trueRef) {
+    ws['!ref'] = trueRef
+    return true
+  }
+  return false
+}
+
+function parseFile(file: File): Promise<{ rows: string[][]; sheetName: string; repaired?: boolean; error?: string }> {
   return new Promise((resolve) => {
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -93,8 +116,25 @@ function parseFile(file: File): Promise<{ rows: string[][]; sheetName: string; e
         const returnsSheet = wb.SheetNames.find(n => n.trim().toLowerCase().includes('return'))
         const sheetName = returnsSheet ?? wb.SheetNames[0]
         const ws = wb.Sheets[sheetName]
-        const raw = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' })
-        resolve({ rows: raw.map(r => r.map(c => String(c ?? '').trim())), sheetName })
+
+        let raw = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' })
+        let repaired = false
+
+        // Auto-repair: if only header row (or nothing) was extracted but the sheet
+        // actually contains many cells, the file's declared dimension is stale
+        // (common Flipkart Returns export bug). Recompute range and re-extract.
+        if (raw.length <= 1) {
+          repaired = repairSheetRange(ws)
+          if (repaired) {
+            raw = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' })
+          }
+        }
+
+        resolve({
+          rows: raw.map(r => r.map(c => String(c ?? '').trim())),
+          sheetName,
+          repaired,
+        })
       } catch {
         resolve({ rows: [], sheetName: '', error: 'File parse failed. Supported formats: CSV, XLS, XLSX.' })
       }
@@ -191,6 +231,7 @@ export default function ProfitLeakagePage() {
   const [profitPerOrder, setProfitPerOrder] = useState('')
   const [fileName, setFileName]       = useState('')
   const [detectedSheet, setDetectedSheet] = useState('')
+  const [wasRepaired, setWasRepaired] = useState(false)
 
   const buildGroups = useCallback((
     rows: string[][], si: number, mri: number, sri: number, qi: number, oi: number, hdrs: string[]
@@ -238,10 +279,12 @@ export default function ProfitLeakagePage() {
   const handleFile = async (file: File) => {
     setError(null); setGroups([]); setStats(null)
     setFileName(file.name); setDetectedSheet(''); setExpandedSku(null)
+    setWasRepaired(false)
     setIsParsing(true)
-    const { rows, sheetName, error: parseError } = await parseFile(file)
+    const { rows, sheetName, repaired, error: parseError } = await parseFile(file)
     setIsParsing(false)
     setDetectedSheet(sheetName)
+    setWasRepaired(Boolean(repaired))
 
     if (parseError) { setError(parseError); return }
 
@@ -285,6 +328,7 @@ export default function ProfitLeakagePage() {
     setGroups([]); setStats(null); setError(null); setHeaders([]); setRawRows([])
     setFileName(''); setExpandedSku(null); setCostPerReturn('300'); setProfitPerOrder('')
     setDetectedSheet(''); setShowColPicker(false); setUploaderOpen(true)
+    setWasRepaired(false)
   }
 
   const totalQty      = stats?.totalQty || 0
@@ -457,6 +501,14 @@ export default function ProfitLeakagePage() {
                       {detectedSheet && (
                         <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
                           Sheet: {detectedSheet}
+                        </span>
+                      )}
+                      {wasRepaired && (
+                        <span
+                          className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
+                          title="The exported file's declared row range was incorrect. We auto-recovered the data so you don't have to open & re-save it in Excel."
+                        >
+                          Auto-repaired
                         </span>
                       )}
                     </div>

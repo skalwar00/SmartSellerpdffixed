@@ -83,8 +83,24 @@ export async function GET(
     image_url: imageMap[item.master_sku] ?? null,
   }))
 
+  // Fetch last "picklist_push" event time so the packer can see when the
+  // manager last pushed orders (separate from the packer's own sync time).
+  let lastPushedAt: string | null = null
+  try {
+    const { data: lastPush } = await db
+      .from('user_activity_log')
+      .select('created_at')
+      .eq('user_id', planRow.user_id)
+      .eq('event_type', 'picklist_push')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    lastPushedAt = lastPush?.created_at ?? null
+  } catch { /* user_activity_log may not exist — non-critical */ }
+
   return NextResponse.json({
     security_pin: planRow.security_pin,
     items: enrichedItems,
+    last_pushed_at: lastPushedAt,
   })
 }

@@ -45,14 +45,49 @@ export async function POST(req: NextRequest) {
   const unmappedSkus: string[] = []
 
   if (pushItems.length === 0 && portalItems && portalItems.length > 0) {
-    const { data: mappings } = await supabase
-      .from('sku_mapping')
-      .select('portal_sku, master_sku, combo_skus')
-      .eq('user_id', user.id)
+    // Fetch ALL sku mappings in batches — Supabase has a default 1000-row
+    // limit on selects, so users with more than 1000 mappings would see
+    // newly-mapped SKUs incorrectly reported as unmapped on every push.
+    type MappingRow = { portal_sku: string; master_sku: string; combo_skus: string[] | null }
+    const allMappings: MappingRow[] = []
+    const BATCH = 1000
+    let offset = 0
+    let comboColumnAvailable = true
+    while (true) {
+      let batch: MappingRow[] | null = null
+      if (comboColumnAvailable) {
+        const { data, error } = await supabase
+          .from('sku_mapping')
+          .select('portal_sku, master_sku, combo_skus')
+          .eq('user_id', user.id)
+          .range(offset, offset + BATCH - 1)
+        if (error) {
+          // combo_skus column likely missing (migration pending) — fall back
+          comboColumnAvailable = false
+          continue
+        }
+        batch = (data as MappingRow[]) ?? []
+      } else {
+        const { data, error } = await supabase
+          .from('sku_mapping')
+          .select('portal_sku, master_sku')
+          .eq('user_id', user.id)
+          .range(offset, offset + BATCH - 1)
+        if (error) break
+        batch = ((data as { portal_sku: string; master_sku: string }[]) ?? []).map((r) => ({
+          ...r,
+          combo_skus: null,
+        }))
+      }
+      if (!batch || batch.length === 0) break
+      allMappings.push(...batch)
+      if (batch.length < BATCH) break
+      offset += BATCH
+    }
 
     const mappingDict: Record<string, string> = {}
     const comboSkusDict: Record<string, string[]> = {}
-    mappings?.forEach((item) => {
+    allMappings.forEach((item) => {
       const key = normalizeSku(item.portal_sku)
       mappingDict[key] = normalizeSku(item.master_sku)
       if (item.combo_skus && item.combo_skus.length > 0) {
@@ -68,10 +103,14 @@ export async function POST(req: NextRequest) {
       const comboSkus = comboSkusDict[portalSku]
 
       if (comboSkus && comboSkus.length > 0) {
-        return comboSkus
-          .map((masterSku) => normalizeSku(masterSku))
+        // combo_skus stores ONLY the EXTRA master SKUs — the primary
+        // master_sku must be included alongside, otherwise the primary
+        // (e.g. JB master SKU) never gets deducted from inventory.
+        const primary = mappingDict[portalSku]
+        const allSkus = [primary, ...comboSkus]
+          .map((masterSku) => normalizeSku(masterSku ?? ''))
           .filter(Boolean)
-          .map((master_sku) => ({ master_sku, total_qty: qty }))
+        return allSkus.map((master_sku) => ({ master_sku, total_qty: qty }))
       }
 
       if (!mappingDict[portalSku]) {

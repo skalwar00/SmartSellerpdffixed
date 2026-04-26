@@ -208,20 +208,56 @@ async function fetchUserData() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
-  // Try fetching with combo_skus column; fall back gracefully if migration hasn't run yet
-  const [mappingResWithCombo, mappingResBase, inventoryRes, planRes] = await Promise.all([
-    supabase.from('sku_mapping').select('portal_sku, master_sku, combo_skus').eq('user_id', user.id),
-    supabase.from('sku_mapping').select('portal_sku, master_sku').eq('user_id', user.id),
-    supabase.from('master_inventory').select('master_sku').eq('user_id', user.id),
+
+  // Fetch ALL sku_mappings in batches to bypass Supabase's default 1000-row
+  // limit. Without this, users with > 1000 mappings would see stale or
+  // missing mappings on the dashboard.
+  type MappingRow = { portal_sku: string; master_sku: string; combo_skus: string[] | null }
+  const allMappings: MappingRow[] = []
+  const BATCH = 1000
+  let offset = 0
+  let comboColumnAvailable = true
+  while (true) {
+    let batch: MappingRow[] = []
+    if (comboColumnAvailable) {
+      const { data, error } = await supabase
+        .from('sku_mapping')
+        .select('portal_sku, master_sku, combo_skus')
+        .eq('user_id', user.id)
+        .range(offset, offset + BATCH - 1)
+      if (error) {
+        comboColumnAvailable = false
+        continue
+      }
+      batch = (data as MappingRow[]) ?? []
+    } else {
+      const { data, error } = await supabase
+        .from('sku_mapping')
+        .select('portal_sku, master_sku')
+        .eq('user_id', user.id)
+        .range(offset, offset + BATCH - 1)
+      if (error) break
+      batch = ((data as { portal_sku: string; master_sku: string }[]) ?? []).map(r => ({
+        ...r,
+        combo_skus: null,
+      }))
+    }
+    if (batch.length === 0) break
+    allMappings.push(...batch)
+    if (batch.length < BATCH) break
+    offset += BATCH
+  }
+
+  const [inventoryRes, planRes] = await Promise.all([
+    supabase.from('master_inventory').select('master_sku').eq('user_id', user.id).range(0, 99999),
     supabase.from('users_plan').select('pending_unmapped_skus').eq('user_id', user.id).maybeSingle(),
   ])
-  const mappingRes = mappingResWithCombo.error ? mappingResBase : mappingResWithCombo
 
   const mappingDict: Record<string, string> = {}
   const comboMappings: Record<string, string[]> = {}
-  mappingRes.data?.forEach(item => {
+  allMappings.forEach(item => {
     mappingDict[item.portal_sku.toUpperCase()] = item.master_sku
-    const comboSkus = (item.combo_skus as string[]) || []
+    const comboSkus = (item.combo_skus as string[] | null) || []
     if (comboSkus.length > 0) {
       comboMappings[item.portal_sku] = [item.master_sku, ...comboSkus]
     }
@@ -242,8 +278,13 @@ async function fetchUserData() {
     })
   }
 
-  const dbPending = (planRes.data?.pending_unmapped_skus as string[]) || []
-  const pendingUnmappedSkus: string[] = dbPending.length > 0
+  // If a users_plan row exists, trust the DB value (even if empty) — otherwise
+  // clearing all unmapped SKUs would resurrect stale legacy entries from JWT
+  // metadata on the next refresh, making the same SKUs appear as unmapped
+  // forever after a label re-push.
+  const planRowExists = !!planRes.data
+  const dbPending = (planRes.data?.pending_unmapped_skus as string[] | null) || []
+  const pendingUnmappedSkus: string[] = planRowExists
     ? dbPending
     : legacyPending
 

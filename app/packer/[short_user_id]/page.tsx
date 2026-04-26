@@ -27,6 +27,23 @@ function formatTime(date: Date) {
   return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
+function formatPushTime(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return 'just now'
+  if (diffMin < 60) return `${diffMin} min ago`
+  const sameDay = d.toDateString() === now.toDateString()
+  const yesterday = new Date(now)
+  yesterday.setDate(now.getDate() - 1)
+  const isYesterday = d.toDateString() === yesterday.toDateString()
+  const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+  if (sameDay) return `today ${time}`
+  if (isYesterday) return `yesterday ${time}`
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' ' + time
+}
+
 // ─── PIN Screen ───────────────────────────────────────────────────────────────
 function PinScreen({ onSuccess, error }: { onSuccess: (pin: string) => void; error: string }) {
   const [pin, setPin] = useState('')
@@ -801,6 +818,7 @@ export default function PackerPage({
   const [search, setSearch] = useState('')
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('syncing')
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [lastPushedAt, setLastPushedAt] = useState<string | null>(null)
   const [isSyncing, setIsSyncing] = useState(false)
   const [qtyModalItem, setQtyModalItem] = useState<PicklistItem | null>(null)
   const [imageItem, setImageItem] = useState<PicklistItem | null>(null)
@@ -894,6 +912,7 @@ export default function PackerPage({
       const json = await res.json()
       setCorrectPin(json.security_pin)
       setItems(json.items || [])
+      setLastPushedAt(json.last_pushed_at ?? null)
       setLastUpdated(new Date())
       setSyncStatus('online')
     } catch {
@@ -934,6 +953,8 @@ export default function PackerPage({
           setLastUpdated(new Date())
           haptic([30, 20, 60])
         }
+        // Refresh last_pushed_at (and items as source-of-truth) silently
+        loadData(true)
       })
       .subscribe((state) => {
         if (state === 'SUBSCRIBED') setSyncStatus('online')
@@ -1132,7 +1153,7 @@ export default function PackerPage({
             <div className="text-right">
               <span className="text-sm font-semibold text-gray-700">{pickedItems}/{totalItems} SKUs</span>
               {lastUpdated && (
-                <p className="text-xs text-gray-400">Updated {formatTime(lastUpdated)}</p>
+                <p className="text-xs text-gray-400">Synced {formatTime(lastUpdated)}</p>
               )}
             </div>
           </div>
@@ -1216,6 +1237,15 @@ export default function PackerPage({
           </div>
         </div>
       </div>
+
+      {/* ── Last Push Time ── */}
+      {lastPushedAt && items.length > 0 && (
+        <div className="px-4 pt-2 pb-0.5">
+          <p className="text-[11px] text-gray-500">
+            <span className="text-blue-600">📦</span> Pushed: <span className="font-medium text-gray-700">{formatPushTime(lastPushedAt)}</span>
+          </p>
+        </div>
+      )}
 
       {/* ── Item List ── */}
       <div className={`px-4 py-4 pb-28 ${effectiveView === 'list' ? 'space-y-1.5' : 'space-y-3'}`}>

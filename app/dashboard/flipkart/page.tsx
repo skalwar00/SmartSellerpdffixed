@@ -77,16 +77,35 @@ async function fetchUserSettings() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  const [mappingRes, costingRes, inventoryRes] = await Promise.all([
-    supabase.from('sku_mapping').select('portal_sku, master_sku, combo_skus').eq('user_id', user.id),
-    supabase.from('design_costing').select('design_pattern, landed_cost').eq('user_id', user.id),
-    supabase.from('master_inventory').select('master_sku').eq('user_id', user.id),
+  // Fetch ALL sku_mappings in batches — Supabase has a default 1000-row
+  // limit, so users with > 1000 mappings would see incomplete data here.
+  type MappingRow = { portal_sku: string; master_sku: string; combo_skus: string[] | null }
+  const allMappings: MappingRow[] = []
+  const BATCH = 1000
+  let offset = 0
+  while (true) {
+    const { data, error } = await supabase
+      .from('sku_mapping')
+      .select('portal_sku, master_sku, combo_skus')
+      .eq('user_id', user.id)
+      .range(offset, offset + BATCH - 1)
+    if (error) break
+    const batch = (data as MappingRow[]) ?? []
+    if (batch.length === 0) break
+    allMappings.push(...batch)
+    if (batch.length < BATCH) break
+    offset += BATCH
+  }
+
+  const [costingRes, inventoryRes] = await Promise.all([
+    supabase.from('design_costing').select('design_pattern, landed_cost').eq('user_id', user.id).range(0, 99999),
+    supabase.from('master_inventory').select('master_sku').eq('user_id', user.id).range(0, 99999),
   ])
 
   const mappingDict: Record<string, string> = {}
   const comboMappings: Record<string, string[]> = {}
 
-  mappingRes.data?.forEach(item => {
+  allMappings.forEach(item => {
     const key = item.portal_sku.toUpperCase()
     mappingDict[key] = item.master_sku
     const comboSkus: string[] = item.combo_skus || []
