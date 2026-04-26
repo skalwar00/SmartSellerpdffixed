@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   Upload, Search, X, CheckCircle2, Link2, Plus, Eye, Trash2,
   Edit2, Check, ChevronDown, ChevronUp, ImageIcon, AlertCircle,
-  Loader2, Sparkles, Package,
+  Loader2, Sparkles, Package, Wand2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -138,6 +138,96 @@ export default function SmartMasterSkuPage() {
   const [editImageUrl, setEditImageUrl] = useState('')
   const [isSavingImage, setIsSavingImage] = useState(false)
   const [inventorySearch, setInventorySearch] = useState<string[]>([])
+
+  // ── Cleanup mappings state ─────────────────────────────────────────────────
+  type CleanupConflict = {
+    canonical: string
+    rows: { id: number; portal_sku: string; master_sku: string; combo_skus: string[] }[]
+  }
+  type CleanupChange = {
+    type: 'update' | 'merge'
+    fromPortal: string
+    toPortal: string
+    masterFrom?: string
+    masterTo?: string
+    comboFrom?: string[]
+    comboTo?: string[]
+  }
+  type CleanupSummary = {
+    totalRows: number
+    plansChanged: number
+    safeUpdates: number
+    safeDeletes: number
+    conflicts: number
+    conflictDetails: CleanupConflict[]
+    changes?: CleanupChange[]
+    changesTotal?: number
+    changesTruncated?: boolean
+    applied?: boolean
+    updated?: number
+    deleted?: number
+    errored?: number
+  }
+  const [isCleanupChecking, setIsCleanupChecking] = useState(false)
+  const [isCleanupApplying, setIsCleanupApplying] = useState(false)
+  const [cleanupSummary, setCleanupSummary] = useState<CleanupSummary | null>(null)
+  const [showCleanupModal, setShowCleanupModal] = useState(false)
+
+  // Helper: parse a fetch Response defensively. If the server returns HTML
+  // (e.g. a Next.js error page) we surface a readable message instead of the
+  // cryptic "Unexpected token '<'" JSON-parse error.
+  const safeJsonResponse = async (res: Response, fallbackMsg: string) => {
+    const text = await res.text()
+    let json: any = null
+    try {
+      json = text ? JSON.parse(text) : null
+    } catch {
+      const snippet = text.slice(0, 200).replace(/\s+/g, ' ').trim()
+      throw new Error(`Server error (HTTP ${res.status}): ${snippet || fallbackMsg}`)
+    }
+    if (!res.ok) {
+      throw new Error((json && json.error) || `${fallbackMsg} (HTTP ${res.status})`)
+    }
+    return json
+  }
+
+  const runCleanupCheck = async () => {
+    setIsCleanupChecking(true)
+    try {
+      const res = await fetch('/api/sku-mapping/cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apply: false }),
+      })
+      const json = await safeJsonResponse(res, 'Cleanup check failed')
+      setCleanupSummary(json)
+      setShowCleanupModal(true)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Cleanup check failed')
+    } finally {
+      setIsCleanupChecking(false)
+    }
+  }
+
+  const runCleanupApply = async () => {
+    setIsCleanupApplying(true)
+    try {
+      const res = await fetch('/api/sku-mapping/cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apply: true }),
+      })
+      const json = await safeJsonResponse(res, 'Cleanup apply failed')
+      setCleanupSummary(json)
+      const u = json.updated || 0
+      const d = json.deleted || 0
+      toast.success(`Cleanup ho gaya — ${u} updated, ${d} duplicates merged`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Cleanup apply failed')
+    } finally {
+      setIsCleanupApplying(false)
+    }
+  }
 
   // ── Manual Create state ────────────────────────────────────────────────────
   const [manualBaseSku, setManualBaseSku] = useState('')
@@ -515,6 +605,35 @@ export default function SmartMasterSkuPage() {
       />
 
       <div className="mx-auto max-w-screen-xl px-4 py-6 sm:px-6 space-y-8">
+
+        {/* ── Section 0: Mapping Maintenance ───────────────────────────────── */}
+        <div className="rounded-xl border border-amber-200 bg-amber-50/40 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100">
+                <Wand2 className="h-5 w-5 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">Cleanup Duplicate Mappings</h2>
+                <p className="text-xs text-gray-500">
+                  Spaces, casing aur XXL/2XL jaisi variants ko ek canonical key me merge kar deta hai (e.g. <span className="font-mono">white pant_3xl</span> aur <span className="font-mono">whitepant_3xl</span>).
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={runCleanupCheck}
+              disabled={isCleanupChecking}
+              className="border-amber-300 text-amber-700 hover:bg-amber-100"
+            >
+              {isCleanupChecking
+                ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Checking…</>
+                : <><Wand2 className="mr-2 h-3.5 w-3.5" /> Check &amp; Cleanup</>
+              }
+            </Button>
+          </div>
+        </div>
 
         {/* ── Section 1: Upload Wizard ─────────────────────────────────────── */}
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
@@ -1128,6 +1247,181 @@ export default function SmartMasterSkuPage() {
           )}
         </div>
       </div>
+
+      {/* ── Cleanup Mappings Modal ──────────────────────────────────────────── */}
+      {showCleanupModal && cleanupSummary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => !isCleanupApplying && setShowCleanupModal(false)}>
+          <div className="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100">
+                  <Wand2 className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Mapping cleanup preview</p>
+                  <p className="text-xs text-gray-400">Total mappings scanned: {cleanupSummary.totalRows}</p>
+                </div>
+              </div>
+              <button onClick={() => !isCleanupApplying && setShowCleanupModal(false)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100" disabled={isCleanupApplying}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+              {/* Stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">Need update</p>
+                  <p className="text-lg font-semibold text-gray-900">{cleanupSummary.plansChanged}</p>
+                </div>
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-xs text-emerald-700">Safe updates</p>
+                  <p className="text-lg font-semibold text-emerald-900">{cleanupSummary.safeUpdates}</p>
+                </div>
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+                  <p className="text-xs text-blue-700">Duplicates merged</p>
+                  <p className="text-lg font-semibold text-blue-900">{cleanupSummary.safeDeletes}</p>
+                </div>
+                <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
+                  <p className="text-xs text-rose-700">Conflicts</p>
+                  <p className="text-lg font-semibold text-rose-900">{cleanupSummary.conflicts}</p>
+                </div>
+              </div>
+
+              {/* Applied result */}
+              {cleanupSummary.applied && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                  <CheckCircle2 className="inline h-4 w-4 mr-2" />
+                  Done — {cleanupSummary.updated} rows updated, {cleanupSummary.deleted} duplicates merged
+                  {cleanupSummary.errored ? `, ${cleanupSummary.errored} errored` : ''}.
+                </div>
+              )}
+
+              {/* Planned changes list */}
+              {!cleanupSummary.applied && cleanupSummary.changes && cleanupSummary.changes.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-700 mb-2">
+                    Planned changes ({cleanupSummary.changesTotal ?? cleanupSummary.changes.length})
+                    {cleanupSummary.changesTruncated && (
+                      <span className="ml-1 font-normal text-gray-400">
+                        — pehle {cleanupSummary.changes.length} dikha rahe hain
+                      </span>
+                    )}
+                  </p>
+                  <div className="space-y-1.5 rounded-lg border border-gray-200 bg-gray-50/60 p-2 max-h-64 overflow-y-auto">
+                    {cleanupSummary.changes.map((c, i) => (
+                      <div
+                        key={i}
+                        className={`rounded border px-2 py-1.5 text-xs ${
+                          c.type === 'merge'
+                            ? 'border-blue-200 bg-blue-50/70'
+                            : 'border-gray-200 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] ${
+                              c.type === 'merge'
+                                ? 'border-blue-300 text-blue-700 bg-blue-100/60'
+                                : 'border-emerald-300 text-emerald-700 bg-emerald-100/60'
+                            }`}
+                          >
+                            {c.type === 'merge' ? 'merge' : 'rename'}
+                          </Badge>
+                          <span className="font-mono text-gray-500 line-through decoration-gray-400">
+                            {c.fromPortal}
+                          </span>
+                          <span className="text-gray-400">→</span>
+                          <span className="font-mono font-medium text-gray-900">{c.toPortal}</span>
+                        </div>
+                        {(c.masterFrom !== undefined && c.masterTo !== undefined && c.masterFrom !== c.masterTo) && (
+                          <div className="mt-1 ml-1 flex items-center gap-2 flex-wrap text-[11px]">
+                            <span className="text-gray-400">master:</span>
+                            <span className="font-mono text-gray-500 line-through decoration-gray-400">{c.masterFrom}</span>
+                            <span className="text-gray-400">→</span>
+                            <span className="font-mono text-gray-800">{c.masterTo}</span>
+                          </div>
+                        )}
+                        {c.comboFrom && c.comboTo && (
+                          <div className="mt-1 ml-1 flex items-center gap-2 flex-wrap text-[11px]">
+                            <span className="text-gray-400">combo:</span>
+                            <span className="font-mono text-gray-500 line-through decoration-gray-400">
+                              [{c.comboFrom.join(', ')}]
+                            </span>
+                            <span className="text-gray-400">→</span>
+                            <span className="font-mono text-gray-800">[{c.comboTo.join(', ')}]</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Conflicts list */}
+              {cleanupSummary.conflicts > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-700 mb-2">
+                    Conflicts ({cleanupSummary.conflicts}) — yeh rows alag-alag master SKU pe map hain par canonicalize hone ke baad same key bante hain. Inhe manually fix karo:
+                  </p>
+                  <div className="space-y-3">
+                    {cleanupSummary.conflictDetails.map((c, i) => (
+                      <div key={i} className="rounded-lg border border-rose-200 bg-rose-50/50 p-3">
+                        <p className="text-xs font-mono font-semibold text-rose-900 mb-2">{c.canonical}</p>
+                        <div className="space-y-1.5">
+                          {c.rows.map(r => (
+                            <div key={r.id} className="flex items-center justify-between text-xs bg-white rounded border border-rose-100 px-2 py-1.5">
+                              <span className="font-mono text-gray-700">{r.portal_sku}</span>
+                              <span className="text-gray-400">→</span>
+                              <span className="font-mono text-gray-900 font-medium">{r.master_sku}</span>
+                              {r.combo_skus && r.combo_skus.length > 0 && (
+                                <Badge variant="outline" className="text-[10px]">+{r.combo_skus.length} combo</Badge>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {cleanupSummary.plansChanged === 0 && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center">
+                  <CheckCircle2 className="mx-auto h-8 w-8 text-emerald-500 mb-2" />
+                  <p className="text-sm font-medium text-emerald-900">Sab mappings already canonical hain — kuch karne ki zarurat nahi.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100 px-6 py-4 flex items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCleanupModal(false)}
+                disabled={isCleanupApplying}
+              >
+                Close
+              </Button>
+              {!cleanupSummary.applied && cleanupSummary.safeUpdates + cleanupSummary.safeDeletes > 0 && (
+                <Button
+                  size="sm"
+                  onClick={runCleanupApply}
+                  disabled={isCleanupApplying}
+                  className="bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  {isCleanupApplying
+                    ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Applying…</>
+                    : <><Check className="mr-2 h-3.5 w-3.5" /> Apply {cleanupSummary.safeUpdates + cleanupSummary.safeDeletes} changes</>
+                  }
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Image Popup ──────────────────────────────────────────────────────── */}
       {imagePopup && (

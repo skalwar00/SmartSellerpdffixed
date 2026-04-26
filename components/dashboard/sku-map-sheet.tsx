@@ -15,7 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { ChevronDown, ChevronUp, Loader2, Plus, X } from 'lucide-react'
-import { canonicalizeSku } from '@/lib/sku-normalize'
+import { canonicalizeSku, isSizeToken } from '@/lib/sku-normalize'
 
 // ── Fuzzy matching ───────────────────────────────────────────────────────────
 
@@ -236,11 +236,19 @@ export function SkuMapSheet({ open, onOpenChange, unmappedSkus, masterOptions, o
     const tokenize = (s: string) =>
       canonicalizeSku(s.toUpperCase()).split(/[-_\s()+,/]+/).filter(Boolean)
 
-    const portalTokens = new Set(tokenize(portalSku))
+    const portalTokenList = tokenize(portalSku)
+    const portalTokens = new Set(portalTokenList)
+    // Keep size tokens (e.g. 6XL) in the residual — they're shared by every
+    // combo half, so removing them causes wrong-size suggestions.
+    const sizeTokens = portalTokenList.filter(isSizeToken)
     for (const mapped of alreadyMapped) {
       if (!mapped) continue
-      for (const t of tokenize(mapped)) portalTokens.delete(t)
+      for (const t of tokenize(mapped)) {
+        if (isSizeToken(t)) continue
+        portalTokens.delete(t)
+      }
     }
+    for (const sz of sizeTokens) portalTokens.add(sz)
     const residual = [...portalTokens].join(' ').trim()
     const matchTarget = residual || portalSku
 

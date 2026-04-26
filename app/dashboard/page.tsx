@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
 import * as XLSX from 'xlsx'
-import { canonicalizeSku } from '@/lib/sku-normalize'
+import { canonicalizeSku, isSizeToken } from '@/lib/sku-normalize'
 
 function SearchableSelect({
   value,
@@ -250,16 +250,27 @@ async function fetchUserData() {
 
   const [inventoryRes, planRes] = await Promise.all([
     supabase.from('master_inventory').select('master_sku').eq('user_id', user.id).range(0, 99999),
-    supabase.from('users_plan').select('pending_unmapped_skus').eq('user_id', user.id).maybeSingle(),
+    supabase.from('users_plan').select('pending_unmapped_skus, is_combo_enabled').eq('user_id', user.id).maybeSingle(),
   ])
 
   const mappingDict: Record<string, string> = {}
   const comboMappings: Record<string, string[]> = {}
+  // Canonical lookup keyed by canonicalizeSku(portal_sku).toUpperCase().
+  // Used as a fallback when CSV portal SKU has different spacing/casing/size
+  // alias from the stored mapping (e.g. CSV has "OLIVE PANT-3XL" but the
+  // saved mapping is "OLIVEPANT-3XL").
+  const canonicalMappingDict: Record<string, string> = {}
+  const canonicalComboMappings: Record<string, string[]> = {}
   allMappings.forEach(item => {
-    mappingDict[item.portal_sku.toUpperCase()] = item.master_sku
+    const portal = item.portal_sku
+    mappingDict[portal.toUpperCase()] = item.master_sku
+    const canon = canonicalizeSku(portal).toUpperCase()
+    canonicalMappingDict[canon] = item.master_sku
     const comboSkus = (item.combo_skus as string[] | null) || []
     if (comboSkus.length > 0) {
-      comboMappings[item.portal_sku] = [item.master_sku, ...comboSkus]
+      const fullCombo = [item.master_sku, ...comboSkus]
+      comboMappings[portal] = fullCombo
+      canonicalComboMappings[canon] = fullCombo
     }
   })
 
@@ -289,8 +300,17 @@ async function fetchUserData() {
     : legacyPending
 
   const masterOptions = inventoryRes.data?.map(i => i.master_sku.toUpperCase()) || []
-  const isComboEnabled = (user.user_metadata?.is_combo_enabled as boolean) ?? false
-  return { mappingDict, masterOptions, userId: user.id, isComboEnabled, comboMappings, pendingUnmappedSkus }
+  // Prefer the users_plan.is_combo_enabled column over JWT metadata: when the
+  // user toggles combo via the onboarding dialog, supabase.auth.updateUser()
+  // refreshes user_metadata only on the *next* JWT refresh, so the freshly
+  // SSR-rendered dashboard would otherwise see the stale value (false) and
+  // hide the combo "+" button.
+  const planComboEnabled = planRes.data?.is_combo_enabled
+  const isComboEnabled =
+    typeof planComboEnabled === 'boolean'
+      ? planComboEnabled
+      : ((user.user_metadata?.is_combo_enabled as boolean) ?? false)
+  return { mappingDict, masterOptions, userId: user.id, isComboEnabled, comboMappings, canonicalMappingDict, canonicalComboMappings, pendingUnmappedSkus }
 }
 
 function parseCSVLine(line: string): string[] {
@@ -425,11 +445,20 @@ export default function PicklistPage() {
     if (opts.length === 0) return ''
     const tokenize = (s: string) =>
       canonicalizeSku(s.toUpperCase()).split(/[-_\s()+,/]+/).filter(Boolean)
-    const portalTokens = new Set(tokenize(portalSku))
+    const portalTokenList = tokenize(portalSku)
+    const portalTokens = new Set(portalTokenList)
+    // Size tokens (e.g. 6XL) are shared across all combo halves, so we never
+    // strip them from the residual — otherwise the next pick loses size context
+    // and we get garbage matches like BLACK-3XL for a -6XL combo.
+    const sizeTokens = portalTokenList.filter(isSizeToken)
     for (const mapped of alreadyMapped) {
       if (!mapped) continue
-      for (const t of tokenize(mapped)) portalTokens.delete(t)
+      for (const t of tokenize(mapped)) {
+        if (isSizeToken(t)) continue
+        portalTokens.delete(t)
+      }
     }
+    for (const sz of sizeTokens) portalTokens.add(sz)
     const residual = [...portalTokens].join(' ').trim()
     const matchTarget = residual || portalSku
     let bestMatch = ''
@@ -773,22 +802,44 @@ export default function PicklistPage() {
         }
       }
 
+      // Resolve a portal SKU against existing mappings using direct lookup
+      // first, then a canonical fallback (strips spaces, normalises XXL→2XL,
+      // ignores case) so renames like "OLIVE PANT-3XL" → "OLIVEPANT-3XL" are
+      // recognised as already-mapped instead of showing up in "New SKU Mapping".
+      const resolveMapping = (portalSku: string): { master?: string; combo?: string[] } | null => {
+        const upper = portalSku.toUpperCase()
+        if (data.comboMappings[portalSku]) return { combo: data.comboMappings[portalSku] }
+        if (data.comboMappings[upper]) return { combo: data.comboMappings[upper] }
+        if (data.mappingDict[upper]) return { master: data.mappingDict[upper] }
+        const canon = canonicalizeSku(portalSku).toUpperCase()
+        if (data.canonicalComboMappings[canon]) return { combo: data.canonicalComboMappings[canon] }
+        if (data.canonicalMappingDict[canon]) return { master: data.canonicalMappingDict[canon] }
+        return null
+      }
+
       const mappedOrders = allOrders.flatMap(order => {
-        const comboSkus = data.comboMappings[order.Portal_SKU]
-        if (comboSkus && comboSkus.length > 0) {
-          return comboSkus.map(masterSku => ({ ...order, Master_SKU: masterSku }))
+        const m = resolveMapping(order.Portal_SKU)
+        if (m?.combo && m.combo.length > 0) {
+          return m.combo.map(masterSku => ({ ...order, Master_SKU: masterSku }))
         }
-        const masterSku = data.mappingDict[order.Portal_SKU]
-        return [{ ...order, Master_SKU: masterSku ?? order.Portal_SKU }]
+        return [{ ...order, Master_SKU: m?.master ?? order.Portal_SKU }]
       })
       setOrders(mappedOrders)
 
       const unmapped = [...new Set(
         allOrders
-          .filter(o => !data.mappingDict[o.Portal_SKU] && !data.comboMappings[o.Portal_SKU])
+          .filter(o => !resolveMapping(o.Portal_SKU))
           .map(o => o.Portal_SKU)
       )]
       if (unmapped.length > 0 && data.masterOptions.length > 0) {
+        // Detect combo-shaped portal SKUs (contain "+", "&", ",", "/" between
+        // tokens, or words like CBO/COMBO) so we can pre-expand the combo UI
+        // and auto-suggest the second half.
+        const looksLikeCombo = (s: string) => {
+          if (/[+&,/]/.test(s)) return true
+          const tokens = s.toUpperCase().split(/[-_\s()+,/]+/).filter(Boolean)
+          return tokens.some(t => t === 'CBO' || t === 'COMBO' || t === 'BUNDLE' || t === 'PACK')
+        }
         const newMappingRows: MappingRow[] = unmapped.map(sku => {
           let bestMatch = data.masterOptions[0] || ''
           let bestScore = 0
@@ -796,13 +847,40 @@ export default function PicklistPage() {
             const score = tokenSetRatio(sku, masterSku)
             if (score > bestScore) { bestScore = score; bestMatch = masterSku }
           }
+          const isCombo = data.isComboEnabled && looksLikeCombo(sku)
+          let comboSkus: string[] = []
+          if (isCombo) {
+            // Use the same residual-fuzzy logic as label flow to auto-suggest
+            // the next combo half. Mirrors bestLabelComboMatch().
+            const tokenize = (s: string) =>
+              canonicalizeSku(s.toUpperCase()).split(/[-_\s()+,/]+/).filter(Boolean)
+            const portalTokenList = tokenize(sku)
+            const portalTokens = new Set(portalTokenList)
+            const sizeTokens = portalTokenList.filter(isSizeToken)
+            for (const t of tokenize(bestMatch)) {
+              if (isSizeToken(t)) continue
+              portalTokens.delete(t)
+            }
+            for (const sz of sizeTokens) portalTokens.add(sz)
+            const residual = [...portalTokens].join(' ').trim()
+            const matchTarget = residual || sku
+            let comboBest = ''
+            let comboScore = -1
+            const used = new Set([bestMatch].filter(Boolean))
+            for (const m of data.masterOptions) {
+              if (!m || used.has(m)) continue
+              const score = tokenSetRatio(matchTarget, m)
+              if (score > comboScore) { comboScore = score; comboBest = m }
+            }
+            if (comboBest) comboSkus = [comboBest]
+          }
           return {
             confirm: bestScore >= 90,
             portalSku: sku,
             masterSku: bestMatch,
             matchScore: bestScore,
-            comboExpanded: false,
-            comboSkus: [],
+            comboExpanded: isCombo && comboSkus.length > 0,
+            comboSkus,
           }
         })
         setUnmappedRows(newMappingRows)
@@ -1373,9 +1451,8 @@ export default function PicklistPage() {
       ;[r.masterSku, ...(r.comboSkus || [])].filter(Boolean).forEach(sku => {
         sku.toUpperCase().split(/[-_\s]+/).filter(Boolean).forEach(t => claimedTokens.add(t))
       })
-      const isSize = (t: string) => /^\d+[A-Z]*$|^[SML]{1,2}$/.test(t)
       const uniqueTokens = portalTokens.filter(t => !claimedTokens.has(t))
-      const sizeTokens   = portalTokens.filter(t => claimedTokens.has(t) && isSize(t))
+      const sizeTokens   = portalTokens.filter(t => claimedTokens.has(t) && isSizeToken(t))
       const query = [...uniqueTokens, ...sizeTokens].join(' ') || r.portalSku
       let bestMatch = available[0]
       let bestScore = 0

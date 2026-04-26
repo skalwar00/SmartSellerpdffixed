@@ -19,7 +19,7 @@ const SIZE_ALIASES = {
 
 function canonicalizeSku(sku) {
   if (!sku) return sku
-  return sku.replace(/[A-Za-z]+/g, (m) => {
+  return sku.replace(/\s+/g, '').replace(/[A-Za-z]+/g, (m) => {
     const upper = m.toUpperCase()
     return SIZE_ALIASES[upper] ?? m
   })
