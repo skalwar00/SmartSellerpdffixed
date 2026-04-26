@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { DashboardHeader } from '@/components/dashboard/sidebar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -28,9 +28,11 @@ import {
   ChevronDown,
   ChevronsUpDown,
   ChevronRight,
+  Link2,
 } from 'lucide-react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
+import { SkuMapSheet } from '@/components/dashboard/sku-map-sheet'
 
 interface OrderRow {
   orderId: string
@@ -41,12 +43,19 @@ interface OrderRow {
   units: number
   settlement: number
   netProfit: number
+  costKnown: boolean
 }
 
 interface Summary {
   totalSettlement: number
   totalProfit: number
   totalUnits: number
+  noCostingCount: number
+  noCostingSettlement: number
+  noCostingSkus: string[]
+  notMappedCount: number
+  notMappedSettlement: number
+  notMappedSkus: string[]
   categoryBreakdown: Record<string, { units: number; settlement: number; profit: number }>
 }
 
@@ -57,8 +66,9 @@ const PAGE_SIZE = 50
 
 function getDesignPattern(masterSku: string): string {
   let sku = masterSku.toUpperCase().trim()
-  sku = sku.replace(/[-_](S|M|L|XL|XXL|\d*XL|FREE|SMALL|LARGE)$/, '')
-  sku = sku.replace(/\(.*?\)/g, '')
+  sku = sku.replace(/[()]/g, '-').replace(/\+/g, '-')
+  sku = sku.replace(/-{2,}/g, '-').replace(/^[-_]+|[-_]+$/g, '')
+  sku = sku.replace(/[-_](XS|S|M|L|XL|XXL|\d*XL|FREE|SMALL|LARGE|OS|ONESIZE)$/i, '')
   return sku.trim().replace(/[-_]+$/, '')
 }
 
@@ -67,14 +77,22 @@ async function fetchUserSettings() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('Not authenticated')
 
-  const [mappingRes, costingRes] = await Promise.all([
-    supabase.from('sku_mapping').select('portal_sku, master_sku').eq('user_id', user.id),
+  const [mappingRes, costingRes, inventoryRes] = await Promise.all([
+    supabase.from('sku_mapping').select('portal_sku, master_sku, combo_skus').eq('user_id', user.id),
     supabase.from('design_costing').select('design_pattern, landed_cost').eq('user_id', user.id),
+    supabase.from('master_inventory').select('master_sku').eq('user_id', user.id),
   ])
 
   const mappingDict: Record<string, string> = {}
+  const comboMappings: Record<string, string[]> = {}
+
   mappingRes.data?.forEach(item => {
-    mappingDict[item.portal_sku.toUpperCase()] = item.master_sku
+    const key = item.portal_sku.toUpperCase()
+    mappingDict[key] = item.master_sku
+    const comboSkus: string[] = item.combo_skus || []
+    if (comboSkus.length > 0) {
+      comboMappings[key] = [item.master_sku, ...comboSkus]
+    }
   })
 
   const costingDict: Record<string, number> = {}
@@ -82,11 +100,13 @@ async function fetchUserSettings() {
     costingDict[item.design_pattern] = item.landed_cost
   })
 
-  return { mappingDict, costingDict }
+  const masterOptions: string[] = inventoryRes.data?.map(r => r.master_sku).sort() ?? []
+
+  return { mappingDict, comboMappings, costingDict, masterOptions }
 }
 
 export default function FlipkartAnalyzerPage() {
-  const { data: settings } = useSWR('flipkart-settings', fetchUserSettings)
+  const { data: settings, mutate: mutateSettings } = useSWR('flipkart-settings', fetchUserSettings)
   const [orders, setOrders] = useState<OrderRow[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -95,11 +115,34 @@ export default function FlipkartAnalyzerPage() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [page, setPage] = useState(0)
+  const [showUnmappedList, setShowUnmappedList] = useState(false)
+  const [showNoCostingList, setShowNoCostingList] = useState(false)
+  const [mapSheetOpen, setMapSheetOpen] = useState(false)
+  const [reanalysisNeeded, setReanalysisNeeded] = useState(false)
 
   const getCategoryAndCost = useCallback((skuName: string): [string, number] => {
     if (!settings) return ['Unknown', 0]
     const portalSku = skuName.trim().toUpperCase()
-    const masterSku = settings.mappingDict[portalSku] || portalSku
+
+    const comboSkus = settings.comboMappings[portalSku]
+    if (comboSkus && comboSkus.length > 0) {
+      let totalCost = 0
+      let allFound = true
+      for (const mSku of comboSkus) {
+        const pattern = getDesignPattern(mSku)
+        if (pattern in settings.costingDict) {
+          totalCost += settings.costingDict[pattern]
+        } else {
+          allFound = false
+        }
+      }
+      return [allFound ? 'Combo Match' : 'Combo (Partial)', totalCost]
+    }
+
+    const isMapped = portalSku in settings.mappingDict
+    if (!isMapped) return ['Not Mapped', 0]
+
+    const masterSku = settings.mappingDict[portalSku]
     const pattern = getDesignPattern(masterSku)
     if (pattern in settings.costingDict) return ['DB Match', settings.costingDict[pattern]]
     return ['No Costing', 0]
@@ -161,17 +204,29 @@ export default function FlipkartAnalyzerPage() {
         const statusCol = row['Order Status'] || row['status'] || ''
 
         const [category, unitCost] = getCategoryAndCost(skuCol)
-        const netProfit = unitsCol > 0 ? settlementCol - (unitsCol * unitCost) : settlementCol
+        const costKnown = category !== 'No Costing' && category !== 'Not Mapped'
+        const netProfit = costKnown
+          ? (unitsCol > 0 ? settlementCol - (unitsCol * unitCost) : settlementCol)
+          : 0
 
-        rows.push({ orderId: orderIdCol, sku: skuCol, category, unitCost, status: statusCol, units: unitsCol, settlement: settlementCol, netProfit })
+        rows.push({ orderId: orderIdCol, sku: skuCol, category, unitCost, status: statusCol, units: unitsCol, settlement: settlementCol, netProfit, costKnown })
 
         if (!categoryBreakdown[category]) {
           categoryBreakdown[category] = { units: 0, settlement: 0, profit: 0 }
         }
         categoryBreakdown[category].units += unitsCol
         categoryBreakdown[category].settlement += settlementCol
-        categoryBreakdown[category].profit += netProfit
+        if (costKnown) categoryBreakdown[category].profit += netProfit
       }
+
+      const costKnownRows = rows.filter(r => r.costKnown)
+      const noCostingRows = rows.filter(r => !r.costKnown && r.category === 'No Costing')
+      const notMappedRows = rows.filter(r => r.category === 'Not Mapped')
+
+      const notMappedSkus = [...new Set(notMappedRows.map(r => r.sku.trim().toUpperCase()))].sort()
+      const noCostingSkus = [...new Set(
+        noCostingRows.map(r => getDesignPattern(settings!.mappingDict[r.sku.trim().toUpperCase()] || r.sku))
+      )].sort()
 
       setOrders(rows)
       setPage(0)
@@ -179,8 +234,14 @@ export default function FlipkartAnalyzerPage() {
       setUploadOpen(false)
       setSummary({
         totalSettlement: rows.reduce((sum, r) => sum + r.settlement, 0),
-        totalProfit: rows.reduce((sum, r) => sum + r.netProfit, 0),
+        totalProfit: costKnownRows.reduce((sum, r) => sum + r.netProfit, 0),
         totalUnits: rows.reduce((sum, r) => sum + r.units, 0),
+        noCostingCount: noCostingRows.length,
+        noCostingSettlement: noCostingRows.reduce((sum, r) => sum + r.settlement, 0),
+        noCostingSkus,
+        notMappedCount: notMappedRows.length,
+        notMappedSettlement: notMappedRows.reduce((sum, r) => sum + r.settlement, 0),
+        notMappedSkus,
         categoryBreakdown,
       })
 
@@ -192,6 +253,15 @@ export default function FlipkartAnalyzerPage() {
       setIsProcessing(false)
     }
   }
+
+  // After mapping is saved → settings refresh → auto re-run analysis
+  useEffect(() => {
+    if (reanalysisNeeded && settings && selectedFiles.length > 0) {
+      setReanalysisNeeded(false)
+      runAnalysis(selectedFiles[0])
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings, reanalysisNeeded])
 
   const handleAnalyze = () => {
     if (selectedFiles[0]) runAnalysis(selectedFiles[0])
@@ -213,8 +283,12 @@ export default function FlipkartAnalyzerPage() {
     URL.revokeObjectURL(url)
   }
 
-  const marginPercent = summary && summary.totalSettlement > 0
-    ? ((summary.totalProfit / summary.totalSettlement) * 100).toFixed(1)
+  const costedSettlement = summary
+    ? summary.totalSettlement - summary.noCostingSettlement
+    : 0
+
+  const marginPercent = summary && costedSettlement > 0
+    ? ((summary.totalProfit / costedSettlement) * 100).toFixed(1)
     : '0.0'
 
   const summaryCards = summary
@@ -225,15 +299,17 @@ export default function FlipkartAnalyzerPage() {
           icon: DollarSign,
           color: 'text-blue-600',
           bg: 'bg-blue-50',
-          sub: null,
+          sub: (summary.noCostingCount + summary.notMappedCount) > 0
+            ? `${summary.notMappedCount > 0 ? `${summary.notMappedCount} unmapped` : ''}${summary.notMappedCount > 0 && summary.noCostingCount > 0 ? ', ' : ''}${summary.noCostingCount > 0 ? `${summary.noCostingCount} no-cost` : ''} excluded`
+            : null,
         },
         {
-          label: 'Net Profit',
+          label: 'Net Profit (Costed)',
           value: `₹${Math.round(summary.totalProfit).toLocaleString('en-IN')}`,
           icon: summary.totalProfit >= 0 ? TrendingUp : TrendingDown,
           color: summary.totalProfit >= 0 ? 'text-green-600' : 'text-red-600',
           bg: summary.totalProfit >= 0 ? 'bg-green-50' : 'bg-red-50',
-          sub: `${marginPercent}% margin`,
+          sub: `${marginPercent}% margin on costed orders`,
         },
         {
           label: 'Net Units Sold',
@@ -249,7 +325,9 @@ export default function FlipkartAnalyzerPage() {
           icon: BarChart2,
           color: 'text-orange-600',
           bg: 'bg-orange-50',
-          sub: null,
+          sub: (summary.noCostingCount + summary.notMappedCount) > 0
+            ? `${orders.length - summary.noCostingCount - summary.notMappedCount} costed, ${summary.notMappedCount + summary.noCostingCount} excluded`
+            : 'All costed',
         },
       ]
     : []
@@ -317,6 +395,92 @@ export default function FlipkartAnalyzerPage() {
             </CardContent>
           )}
         </Card>
+
+        {summary && (summary.notMappedCount > 0 || summary.noCostingCount > 0) && (
+          <div className="flex flex-col gap-2">
+            {summary.notMappedCount > 0 && (
+              <div className="rounded-lg border border-red-200 bg-red-50 text-sm text-red-800">
+                <div className="flex items-start gap-3 px-4 py-3">
+                  <span className="mt-0.5 shrink-0 text-base">🔗</span>
+                  <div className="flex-1">
+                    <span className="font-semibold">{summary.notMappedSkus.length} unique portal SKUs</span> mapped nahi hain
+                    {' '}({summary.notMappedCount} orders, settlement ₹{Math.round(summary.notMappedSettlement).toLocaleString('en-IN')}).
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    <button
+                      onClick={() => setShowUnmappedList(v => !v)}
+                      className="rounded border border-red-300 bg-red-100 px-2 py-0.5 text-xs font-medium hover:bg-red-200 transition-colors"
+                    >
+                      {showUnmappedList ? 'Hide' : 'List'}
+                    </button>
+                    <button
+                      onClick={() => setMapSheetOpen(true)}
+                      className="flex items-center gap-1 rounded border border-red-400 bg-red-600 px-2.5 py-0.5 text-xs font-semibold text-white hover:bg-red-700 transition-colors"
+                    >
+                      <Link2 className="h-3 w-3" />
+                      Map SKUs
+                    </button>
+                  </div>
+                </div>
+                {showUnmappedList && (
+                  <div className="border-t border-red-200 px-4 py-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {summary.notMappedSkus.map(sku => (
+                        <code
+                          key={sku}
+                          className="rounded bg-red-100 border border-red-200 px-2 py-0.5 text-xs font-mono text-red-900 select-all"
+                        >
+                          {sku}
+                        </code>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {summary.noCostingCount > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-800">
+                <div className="flex items-start gap-3 px-4 py-3">
+                  <span className="mt-0.5 shrink-0 text-base">💰</span>
+                  <div className="flex-1">
+                    <span className="font-semibold">{summary.noCostingSkus.length} design patterns</span> ki costing missing hai
+                    ({summary.noCostingCount} orders, settlement ₹{Math.round(summary.noCostingSettlement).toLocaleString('en-IN')}).
+                    <br />
+                    <span className="text-xs text-amber-600">
+                      Costing page pe in design patterns ki landed cost add karo.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowNoCostingList(v => !v)}
+                    className="shrink-0 rounded border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-medium hover:bg-amber-200 transition-colors"
+                  >
+                    {showNoCostingList ? 'Hide' : 'Show SKUs'}
+                  </button>
+                </div>
+                {showNoCostingList && (
+                  <div className="border-t border-amber-200 px-4 py-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {summary.noCostingSkus.map(sku => (
+                        <code
+                          key={sku}
+                          className="rounded bg-amber-100 border border-amber-200 px-2 py-0.5 text-xs font-mono text-amber-900 select-all"
+                        >
+                          {sku}
+                        </code>
+                      ))}
+                    </div>
+                    <a
+                      href="/dashboard/costing"
+                      className="mt-2 inline-block text-xs underline font-medium text-amber-700 hover:text-amber-900"
+                    >
+                      Costing page pe jaao →
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {summary && (
           <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
@@ -427,7 +591,11 @@ export default function FlipkartAnalyzerPage() {
                     {pageOrders.map((order, idx) => (
                       <TableRow
                         key={idx}
-                        className={`transition-colors hover:bg-muted/50 ${idx % 2 !== 0 ? 'bg-muted/20' : ''}`}
+                        className={`transition-colors hover:bg-amber-50 ${
+                          !order.costKnown
+                            ? 'bg-amber-50/60 border-l-2 border-l-amber-400'
+                            : idx % 2 !== 0 ? 'bg-muted/20' : ''
+                        }`}
                       >
                         <TableCell className="pl-4 font-mono text-xs text-muted-foreground">
                           {order.orderId}
@@ -439,10 +607,15 @@ export default function FlipkartAnalyzerPage() {
                           {order.sku}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className="text-xs">{order.category}</Badge>
+                          <Badge
+                            variant="secondary"
+                            className={`text-xs ${!order.costKnown ? 'bg-amber-100 text-amber-700 border-amber-300' : ''}`}
+                          >
+                            {order.category}
+                          </Badge>
                         </TableCell>
                         <TableCell className="text-right text-sm">
-                          ₹{order.unitCost}
+                          {order.costKnown ? `₹${order.unitCost}` : <span className="text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {order.status}
@@ -453,10 +626,15 @@ export default function FlipkartAnalyzerPage() {
                         </TableCell>
                         <TableCell
                           className={`text-right pr-4 font-semibold text-sm ${
-                            order.netProfit >= 0 ? 'text-green-600' : 'text-red-600'
+                            !order.costKnown
+                              ? 'text-amber-500'
+                              : order.netProfit >= 0 ? 'text-green-600' : 'text-red-600'
                           }`}
                         >
-                          ₹{Math.round(order.netProfit).toLocaleString('en-IN')}
+                          {order.costKnown
+                            ? `₹${Math.round(order.netProfit).toLocaleString('en-IN')}`
+                            : '—'
+                          }
                         </TableCell>
                       </TableRow>
                     ))}
@@ -496,6 +674,17 @@ export default function FlipkartAnalyzerPage() {
           </Card>
         )}
       </div>
+
+      <SkuMapSheet
+        open={mapSheetOpen}
+        onOpenChange={setMapSheetOpen}
+        unmappedSkus={summary?.notMappedSkus ?? []}
+        masterOptions={settings?.masterOptions ?? []}
+        onSaved={async () => {
+          await mutateSettings()
+          setReanalysisNeeded(true)
+        }}
+      />
     </>
   )
 }

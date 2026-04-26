@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import useSWR, { mutate } from 'swr'
 import * as XLSX from 'xlsx'
+import { canonicalizeSku } from '@/lib/sku-normalize'
 
 function SearchableSelect({
   value,
@@ -137,10 +138,12 @@ interface LiveItem {
   remaining_stock?: number
 }
 
-// Token Set Ratio - matches thefuzz behavior
+// Token Set Ratio - matches thefuzz behavior.
+// Canonicalizes size aliases (XXL→2XL, etc.) before comparing so that
+// XXL and 2XL are treated as identical.
 function tokenSetRatio(str1: string, str2: string): number {
-  const s1 = str1.toUpperCase().trim()
-  const s2 = str2.toUpperCase().trim()
+  const s1 = canonicalizeSku(str1.toUpperCase().trim())
+  const s2 = canonicalizeSku(str2.toUpperCase().trim())
   if (s1 === s2) return 100
   const tokens1 = new Set(s1.split(/[-_\s]+/).filter(Boolean))
   const tokens2 = new Set(s2.split(/[-_\s]+/).filter(Boolean))
@@ -305,8 +308,9 @@ export default function PicklistPage() {
   const [importFile, setImportFile] = useState<File | null>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [isRegeneratingLink, setIsRegeneratingLink] = useState(false)
-  const [labelUnmappedRows, setLabelUnmappedRows] = useState<{ portalSku: string; masterSku: string; comboExpanded?: boolean; comboSkus?: string[] }[]>([])
+  const [labelUnmappedRows, setLabelUnmappedRows] = useState<{ portalSku: string; masterSku: string; matchScore?: number; selected?: boolean; comboExpanded?: boolean; comboSkus?: string[] }[]>([])
   const [isSavingLabelMappings, setIsSavingLabelMappings] = useState(false)
+  const [labelFilter, setLabelFilter] = useState<'all' | 'selected' | 'unselected'>('all')
 
   const fetchLiveItems = useCallback(async (silent = false) => {
     if (!silent) setLiveAutoSyncing(true)
@@ -337,7 +341,21 @@ export default function PicklistPage() {
       sku => !mappingDict[sku.toUpperCase()] && !comboMappings[sku] && !comboMappings[sku.toUpperCase()]
     )
 
-    setLabelUnmappedRows(stillUnmapped.map(sku => ({ portalSku: sku, masterSku: '' })))
+    const opts = (data.masterOptions || []).filter(Boolean)
+    setLabelUnmappedRows(stillUnmapped.map(sku => {
+      let bestMatch = ''
+      let bestScore = 0
+      for (const masterSku of opts) {
+        const score = tokenSetRatio(sku, masterSku)
+        if (score > bestScore) { bestScore = score; bestMatch = masterSku }
+      }
+      return {
+        portalSku: sku,
+        masterSku: bestScore >= 60 ? bestMatch : '',
+        matchScore: bestScore,
+        selected: bestScore >= 95,
+      }
+    }))
 
     // If some SKUs got mapped elsewhere, silently clean them from DB
     if (stillUnmapped.length < pendingUnmappedSkus.length) {
@@ -353,13 +371,57 @@ export default function PicklistPage() {
     Object.keys(data?.comboMappings ?? {}).sort().join(','),
   ])
 
+  // Residual-token fuzzy match for combo SKUs.
+  // Strips tokens of already-mapped masters from the portal SKU and finds
+  // the best remaining match, so combos like PT-CBO(BEIGE+WHITE)-5XL → first
+  // suggests BEIGE-5XL, then WHITE-5XL on next +.
+  const bestLabelComboMatch = useCallback((
+    portalSku: string,
+    alreadyMapped: string[],
+    exclude: Set<string>,
+  ): string => {
+    const opts = (data?.masterOptions || []).filter(Boolean)
+    if (opts.length === 0) return ''
+    const tokenize = (s: string) =>
+      canonicalizeSku(s.toUpperCase()).split(/[-_\s()+,/]+/).filter(Boolean)
+    const portalTokens = new Set(tokenize(portalSku))
+    for (const mapped of alreadyMapped) {
+      if (!mapped) continue
+      for (const t of tokenize(mapped)) portalTokens.delete(t)
+    }
+    const residual = [...portalTokens].join(' ').trim()
+    const matchTarget = residual || portalSku
+    let bestMatch = ''
+    let bestScore = -1
+    for (const m of opts) {
+      if (exclude.has(m)) continue
+      const score = tokenSetRatio(matchTarget, m)
+      if (score > bestScore) { bestScore = score; bestMatch = m }
+    }
+    return bestMatch
+  }, [data?.masterOptions])
+
+  const toggleLabelCombo = (idx: number) => {
+    setLabelUnmappedRows(prev => prev.map((r, i) => {
+      if (i !== idx) return r
+      const expanding = !r.comboExpanded
+      // First-time expand auto-fills one residual-fuzzy combo suggestion
+      if (expanding && (!r.comboSkus || r.comboSkus.length === 0)) {
+        const used = new Set([r.masterSku].filter(Boolean))
+        const next = bestLabelComboMatch(r.portalSku, [r.masterSku], used)
+        return { ...r, comboExpanded: true, comboSkus: next ? [next] : [] }
+      }
+      return { ...r, comboExpanded: expanding }
+    }))
+  }
+
   const addLabelComboSku = (idx: number) => {
     setLabelUnmappedRows(prev => prev.map((r, i) => {
       if (i !== idx) return r
-      const usedSkus = new Set([r.masterSku, ...(r.comboSkus || [])])
-      const available = (data?.masterOptions || []).filter(o => o && !usedSkus.has(o))
-      const nextSku = available.length > 0 ? available[0] : ''
-      return { ...r, comboSkus: [...(r.comboSkus || []), nextSku] }
+      const mapped = [r.masterSku, ...(r.comboSkus || [])].filter(Boolean)
+      const used = new Set(mapped)
+      const next = bestLabelComboMatch(r.portalSku, mapped, used)
+      return { ...r, comboSkus: [...(r.comboSkus || []), next] }
     }))
   }
 
@@ -464,9 +526,9 @@ export default function PicklistPage() {
 
   const handleSaveLabelMappings = async () => {
     const supabase = createClient()
-    const toSave = labelUnmappedRows.filter(r => r.masterSku.trim())
+    const toSave = labelUnmappedRows.filter(r => r.selected && r.masterSku.trim())
     if (toSave.length === 0) {
-      toast.error('Pehle Master SKU select karo')
+      toast.error('Pehle row select karo aur Master SKU choose karo')
       return
     }
     setIsSavingLabelMappings(true)
@@ -476,9 +538,9 @@ export default function PicklistPage() {
 
       const records: SkuMappingRecord[] = toSave.map(r => ({
         user_id: user.id,
-        portal_sku: r.portalSku,
-        master_sku: r.masterSku.trim().toUpperCase(),
-        combo_skus: (r.comboSkus || []).filter(Boolean),
+        portal_sku: canonicalizeSku(r.portalSku),
+        master_sku: canonicalizeSku(r.masterSku.trim().toUpperCase()),
+        combo_skus: (r.comboSkus || []).filter(Boolean).map(s => canonicalizeSku(s.trim().toUpperCase())),
       }))
       await upsertSkuMappings(supabase, records)
 
@@ -490,7 +552,11 @@ export default function PicklistPage() {
       // Auto-update live picklist items that were pushed with these portal SKUs
       const picklistUpdated = await applyMappingsToLivePicklist(
         supabase,
-        toSave.map(r => ({ portalSku: r.portalSku, masterSku: r.masterSku.trim().toUpperCase(), comboSkus: r.comboSkus })),
+        toSave.map(r => ({
+          portalSku: r.portalSku,
+          masterSku: canonicalizeSku(r.masterSku.trim().toUpperCase()),
+          comboSkus: (r.comboSkus || []).map(s => canonicalizeSku(s.trim().toUpperCase())),
+        })),
         user.id
       )
       if (picklistUpdated) {
@@ -1701,25 +1767,106 @@ export default function PicklistPage() {
               </CardTitle>
               <CardDescription>
                 {isComboEnabled
-                  ? 'Ye SKUs label se aaye hain. Master SKU select karo. Combo ke liye + dabao.'
-                  : 'Ye SKUs label se aaye hain aur inki koi mapping nahi mili. Master SKU select karo aur save karo.'}
+                  ? 'Ye SKUs label se aaye hain. ≥95% wale auto-checked hain — baaki khud tick karo. Combo ke liye + dabao.'
+                  : 'Ye SKUs label se aaye hain. ≥95% confidence wale auto-checked hain — baaki review kar ke khud tick karo.'}
               </CardDescription>
+              <div className="mt-2 flex items-center gap-1">
+                {(['all', 'selected', 'unselected'] as const).map(f => {
+                  const count = f === 'all'
+                    ? labelUnmappedRows.length
+                    : f === 'selected'
+                    ? labelUnmappedRows.filter(r => r.selected).length
+                    : labelUnmappedRows.filter(r => !r.selected).length
+                  const label = f === 'all' ? 'All' : f === 'selected' ? 'Selected' : 'Unselected'
+                  const active = labelFilter === f
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setLabelFilter(f)}
+                      className={`h-7 rounded-md border px-2.5 text-[11px] font-medium transition-colors ${
+                        active
+                          ? 'border-amber-500 bg-amber-600 text-white'
+                          : 'border-amber-300 bg-white/70 text-amber-700 hover:bg-amber-100'
+                      }`}
+                    >
+                      {label} ({count})
+                    </button>
+                  )
+                })}
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <div className="max-h-[400px] overflow-auto">
                 <Table>
                   <TableHeader className="sticky top-0 bg-background shadow-[0_1px_0_0_hsl(var(--border))] z-10">
                     <TableRow>
-                      <TableHead className="pl-4 w-[220px]">Portal SKU (Label)</TableHead>
+                      <TableHead className="w-10 pl-4">
+                        <Checkbox
+                          checked={(() => {
+                            const visible = labelUnmappedRows.filter(r =>
+                              labelFilter === 'all' ? true : labelFilter === 'selected' ? !!r.selected : !r.selected
+                            )
+                            return visible.length > 0 && visible.every(r => r.selected)
+                          })()}
+                          onCheckedChange={(checked) => {
+                            const isChecked = checked === true
+                            setLabelUnmappedRows(prev => prev.map(r => {
+                              const visible = labelFilter === 'all' ? true : labelFilter === 'selected' ? !!r.selected : !r.selected
+                              return visible ? { ...r, selected: isChecked } : r
+                            }))
+                          }}
+                          aria-label="Select all visible"
+                        />
+                      </TableHead>
+                      <TableHead className="w-[220px]">Portal SKU (Label)</TableHead>
                       <TableHead>Master SKU</TableHead>
                       {isComboEnabled && <TableHead className="w-10" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {labelUnmappedRows.map((row, idx) => (
+                    {labelUnmappedRows
+                      .map((row, idx) => ({ row, idx }))
+                      .filter(({ row }) =>
+                        labelFilter === 'all'
+                          ? true
+                          : labelFilter === 'selected'
+                          ? !!row.selected
+                          : !row.selected
+                      )
+                      .map(({ row, idx }) => (
                       <Fragment key={idx}>
                         <TableRow className={idx % 2 !== 0 ? 'bg-muted/20' : ''}>
-                          <TableCell className="pl-4 font-mono text-sm text-amber-800">{row.portalSku}</TableCell>
+                          <TableCell className="pl-4">
+                            <Checkbox
+                              checked={!!row.selected}
+                              onCheckedChange={(checked) => {
+                                const updated = [...labelUnmappedRows]
+                                updated[idx] = { ...updated[idx], selected: checked === true }
+                                setLabelUnmappedRows(updated)
+                              }}
+                              aria-label={`Select ${row.portalSku}`}
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-sm text-amber-800">
+                            <div className="flex items-center gap-2">
+                              <span>{row.portalSku}</span>
+                              {typeof row.matchScore === 'number' && row.matchScore > 0 && (
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                    row.matchScore >= 90
+                                      ? 'bg-green-100 text-green-700'
+                                      : row.matchScore >= 70
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : 'bg-gray-100 text-gray-600'
+                                  }`}
+                                  title="Fuzzy match confidence"
+                                >
+                                  {row.matchScore}%
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <SearchableSelect
                               value={row.masterSku}
@@ -1736,13 +1883,9 @@ export default function PicklistPage() {
                           {isComboEnabled && (
                             <TableCell>
                               <button
-                                onClick={() => {
-                                  const updated = [...labelUnmappedRows]
-                                  updated[idx] = { ...updated[idx], comboExpanded: !updated[idx].comboExpanded }
-                                  setLabelUnmappedRows(updated)
-                                }}
+                                onClick={() => toggleLabelCombo(idx)}
                                 className="flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-muted-foreground/40 text-muted-foreground transition-colors hover:border-amber-500 hover:bg-amber-50 hover:text-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1"
-                                title="Add combo SKUs"
+                                title="Add combo SKUs (auto-suggested)"
                               >
                                 {row.comboExpanded ? (
                                   <ChevronUp className="h-3.5 w-3.5" />
@@ -1756,6 +1899,7 @@ export default function PicklistPage() {
 
                         {isComboEnabled && row.comboExpanded && (
                           <TableRow className={idx % 2 !== 0 ? 'bg-muted/20' : ''}>
+                            <TableCell />
                             <TableCell />
                             <TableCell colSpan={2} className="py-2 pr-4">
                               <div className="flex flex-col gap-2 border-l-2 border-amber-200 pl-3">
@@ -1797,12 +1941,12 @@ export default function PicklistPage() {
               </div>
               <div className="flex items-center justify-between gap-2 border-t p-4">
                 <p className="text-xs text-muted-foreground">
-                  {labelUnmappedRows.filter(r => r.masterSku).length} / {labelUnmappedRows.length} mapped
+                  {labelUnmappedRows.filter(r => r.selected && r.masterSku).length} selected / {labelUnmappedRows.length} total
                 </p>
                 <Button
                   size="sm"
                   onClick={handleSaveLabelMappings}
-                  disabled={isSavingLabelMappings || labelUnmappedRows.every(r => !r.masterSku)}
+                  disabled={isSavingLabelMappings || labelUnmappedRows.every(r => !r.selected || !r.masterSku)}
                   className="bg-amber-600 hover:bg-amber-700 text-white"
                 >
                   {isSavingLabelMappings ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}

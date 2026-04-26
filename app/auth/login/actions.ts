@@ -39,6 +39,19 @@ export async function loginAction(prevState: { error: string | null }, formData:
     } catch {
       // best-effort — never block login
     }
+
+    // Always refresh the session after login (and after any metadata migration)
+    // so the Set-Cookie header contains a fresh JWT that reflects the current
+    // (stripped) metadata. Without this the login-time JWT — which still
+    // carries the old large fields — is sent to the browser and the
+    // middleware's cookie-size guard clears it, bouncing the user straight
+    // back to /auth/login with no error message.
+    try {
+      await supabase.auth.refreshSession()
+    } catch {
+      // best-effort — if refresh fails we still proceed; middleware will
+      // attempt a refresh on the next request.
+    }
   }
 
   redirect('/dashboard')

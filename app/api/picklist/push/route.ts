@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { canonicalizeSku } from '@/lib/sku-normalize'
 
 interface PushItem {
   master_sku: string
@@ -12,7 +13,7 @@ interface PortalItem {
 }
 
 function normalizeSku(value: string) {
-  return value.trim().toUpperCase()
+  return canonicalizeSku(value.trim().toUpperCase())
 }
 
 function aggregateItems(items: PushItem[], forceUppercase = false) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import * as XLSX from 'xlsx'
+import { canonicalizeSku, canonicalSize } from '@/lib/sku-normalize'
 
 // Sizes ordered longest-first to avoid partial matches (e.g. XL before 2XL)
 const SIZES_DETECT = [
@@ -23,7 +24,7 @@ function extractBaseAndSize(sku: string): { base: string; size: string } | null 
     if (upper.endsWith('-' + sz) || upper.endsWith('_' + sz)) {
       const baseEnd = sku.length - sz.length - 1
       const base = sku.slice(0, baseEnd).replace(/[-_]+$/, '') // strip any trailing separators
-      return { base, size: sz.toUpperCase() }
+      return { base, size: canonicalSize(sz.toUpperCase()) }
     }
   }
   // Fallback: 1-3 digit numeric suffix (covers shoe sizes, kids sizes, waist 50/52, etc.
@@ -39,15 +40,16 @@ function extractBaseAndSize(sku: string): { base: string; size: string } | null 
 }
 
 function normalizeForFuzzy(sku: string): string {
-  return sku
-    .toUpperCase()
-    .replace(/^(FK[-_]?|MY[-_]?|MN[-_]?|MEE[-_]?|FLP[-_]?|MEESHO[-_]?)/i, '')
-    .replace(/[-_\s]/g, '')
+  return canonicalizeSku(
+    sku
+      .toUpperCase()
+      .replace(/^(FK[-_]?|MY[-_]?|MN[-_]?|MEE[-_]?|FLP[-_]?|MEESHO[-_]?)/i, '')
+      .replace(/[-_\s]/g, '')
+  )
 }
 
 function skuTokens(sku: string): string[] {
-  return sku
-    .toUpperCase()
+  return canonicalizeSku(sku.toUpperCase())
     .split(/[-_\s]+/)
     .map(t => t.trim())
     // Filter out known sizes AND any short numeric token (1-3 digits) that's likely a size

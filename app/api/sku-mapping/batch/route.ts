@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { canonicalizeSku } from '@/lib/sku-normalize'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -15,9 +16,9 @@ export async function POST(request: Request) {
 
   const records = mappings.map(m => ({
     user_id: user.id,
-    portal_sku: m.portal_sku.trim(),
-    master_sku: m.master_sku.toUpperCase().trim(),
-    combo_skus: m.combo_skus || [],
+    portal_sku: canonicalizeSku(m.portal_sku.trim()),
+    master_sku: canonicalizeSku(m.master_sku.toUpperCase().trim()),
+    combo_skus: (m.combo_skus || []).map(s => canonicalizeSku(s)),
   }))
 
   const { error } = await supabase

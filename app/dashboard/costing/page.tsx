@@ -20,8 +20,9 @@ import useSWR, { mutate } from 'swr'
 
 function getDesignPattern(masterSku: string): string {
   let sku = masterSku.toUpperCase().trim()
-  sku = sku.replace(/[-_](S|M|L|XL|XXL|\d*XL|FREE|SMALL|LARGE)$/, '')
-  sku = sku.replace(/\(.*?\)/g, '')
+  sku = sku.replace(/[()]/g, '-').replace(/\+/g, '-')
+  sku = sku.replace(/-{2,}/g, '-').replace(/^[-_]+|[-_]+$/g, '')
+  sku = sku.replace(/[-_](XS|S|M|L|XL|XXL|\d*XL|FREE|SMALL|LARGE|OS|ONESIZE)$/i, '')
   return sku.trim().replace(/[-_]+$/, '')
 }
 

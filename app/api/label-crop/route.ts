@@ -4,6 +4,7 @@ export const runtime = 'nodejs'
 import { NextRequest, NextResponse } from 'next/server'
 import { PDFDocument } from 'pdf-lib'
 import PDFParser from 'pdf2json'
+import { canonicalizeSku, canonicalSize } from '@/lib/sku-normalize'
 
 type PortalKey = 'flipkart' | 'meesho'
 
@@ -82,10 +83,14 @@ function normalizeText(value: string) {
 }
 
 function normalizeSku(value: string) {
-  return value
+  const cleaned = value
     .toUpperCase()
+    .replace(/[()]/g, '-')
+    .replace(/\+/g, '-')
     .replace(/[^A-Z0-9._/-]/g, '')
+    .replace(/-{2,}/g, '-')
     .replace(/^[._/-]+|[._/-]+$/g, '')
+  return canonicalizeSku(cleaned)
 }
 
 function makeShortSku(value: string) {
@@ -97,11 +102,12 @@ function makeShortSku(value: string) {
 }
 
 function normalizeSize(value: string) {
-  return normalizeText(value)
+  const cleaned = normalizeText(value)
     .toUpperCase()
     .replace(/\bFREE\s*SIZE\b/g, 'FREE')
     .replace(/\bONE\s*SIZE\b/g, 'ONESIZE')
     .replace(/[^A-Z0-9]/g, '')
+  return canonicalSize(cleaned)
 }
 
 function skuIncludesSize(sku: string, size: string) {
