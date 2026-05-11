@@ -33,6 +33,7 @@ import {
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { SkuMapSheet } from '@/components/dashboard/sku-map-sheet'
+import { canonicalizeSku } from '@/lib/sku-normalize'
 
 interface OrderRow {
   orderId: string
@@ -141,7 +142,7 @@ export default function FlipkartAnalyzerPage() {
 
   const getCategoryAndCost = useCallback((skuName: string): [string, number] => {
     if (!settings) return ['Unknown', 0]
-    const portalSku = skuName.trim().toUpperCase()
+    const portalSku = canonicalizeSku(skuName.trim()).toUpperCase()
 
     const comboSkus = settings.comboMappings[portalSku]
     if (comboSkus && comboSkus.length > 0) {
@@ -244,7 +245,7 @@ export default function FlipkartAnalyzerPage() {
 
       const notMappedSkus = [...new Set(notMappedRows.map(r => r.sku.trim().toUpperCase()))].sort()
       const noCostingSkus = [...new Set(
-        noCostingRows.map(r => getDesignPattern(settings!.mappingDict[r.sku.trim().toUpperCase()] || r.sku))
+        noCostingRows.map(r => getDesignPattern(settings!.mappingDict[canonicalizeSku(r.sku.trim()).toUpperCase()] || r.sku))
       )].sort()
 
       setOrders(rows)

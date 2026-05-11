@@ -20,15 +20,32 @@ export async function createClient() {
           //  "Unexpected end of JSON input" crashes in Server Components).
           return cookieStore.getAll().filter(({ name, value }) => {
             if (!name.startsWith('sb-')) return true
-            // Only validate cookies that look like they hold JSON
+            if (!value) return false
             const trimmed = value.trimStart()
-            if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return true
-            try {
-              JSON.parse(value)
-              return true
-            } catch {
-              return false
+
+            // Raw JSON cookie — validate directly
+            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+              try {
+                JSON.parse(value)
+                return true
+              } catch {
+                return false
+              }
             }
+
+            // Base64-encoded chunk cookie (e.g. "base64-xxxxxx") — decode and validate
+            if (trimmed.startsWith('base64-')) {
+              try {
+                const b64 = trimmed.slice('base64-'.length)
+                const decoded = Buffer.from(b64, 'base64').toString('utf-8')
+                JSON.parse(decoded)
+                return true
+              } catch {
+                return false
+              }
+            }
+
+            return true
           })
         },
         setAll(cookiesToSet) {

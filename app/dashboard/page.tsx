@@ -680,10 +680,10 @@ export default function PicklistPage() {
     const supabase = createClient()
 
     const channel = supabase
-      .channel('picklist_live_changes')
+      .channel('picklist_items_changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'picklist_live' },
+        { event: '*', schema: 'public', table: 'picklist_items' },
         () => { fetchLiveItems(true) }
       )
       .subscribe()
@@ -1102,9 +1102,12 @@ export default function PicklistPage() {
     setIsLoadingMappings(true)
     try {
       const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
       const { data: rows, error } = await supabase
         .from('sku_mapping')
         .select('portal_sku, master_sku, combo_skus')
+        .eq('user_id', user.id)
         .order('portal_sku', { ascending: true })
       if (error) throw error
       setAllMappings((rows || []).map(r => ({

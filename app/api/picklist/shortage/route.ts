@@ -35,10 +35,7 @@ export async function POST(req: NextRequest) {
 
   if (!shortage) {
     // Clearing shortage — reset flags and remaining_stock
-    const updatePayload: Record<string, unknown> = { shortage: false }
-    try {
-      updatePayload.remaining_stock = 0
-    } catch { /* column may not exist */ }
+    const updatePayload: Record<string, unknown> = { shortage: false, remaining_stock: 0 }
 
     const { error: updateErr } = await db
       .from('picklist_items')
@@ -88,7 +85,7 @@ export async function POST(req: NextRequest) {
     updatePayload = {
       shortage: true,
       picked_qty: avail,
-      status: avail >= totalQty ? 'picked' : 'pending',
+      status: 'pending',
       remaining_stock: 0,
     }
   }

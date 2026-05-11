@@ -27,6 +27,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import useSWR from 'swr'
+import { canonicalizeSku } from '@/lib/sku-normalize'
 
 interface Order {
   orderId: string
@@ -97,7 +98,8 @@ export default function MyntraPage() {
 
   const getCost = useCallback((sku: string) => {
     if (!settings) return 0
-    const mapped = settings.mappingDict[sku] || sku
+    const canonicalKey = canonicalizeSku(sku.trim()).toUpperCase()
+    const mapped = settings.mappingDict[canonicalKey] || sku
     const pattern = getDesignPattern(mapped)
     if (settings.costingDict[pattern]) return settings.costingDict[pattern]
     return 0

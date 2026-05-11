@@ -11,7 +11,15 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+
+  let user = null
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch {
+    // Corrupted session cookie — clear and bounce to login
+    redirect('/auth/login')
+  }
 
   if (!user) {
     redirect('/auth/login')
@@ -27,6 +35,8 @@ export default async function DashboardLayout({
     ? new Date(planData.expiry_date) < new Date()
     : true
 
+  let daysLeft = 0
+
   if (isTrialExpired && !planData) {
     const expiryDate = new Date()
     expiryDate.setDate(expiryDate.getDate() + 14)
@@ -35,19 +45,18 @@ export default async function DashboardLayout({
       plan_type: 'trial',
       expiry_date: expiryDate.toISOString(),
     })
+    daysLeft = 14
   } else if (isTrialExpired && planData?.plan_type !== 'pro') {
     redirect('/trial-expired')
-  }
-
-  const daysLeft = planData
-    ? Math.max(
-        0,
-        Math.ceil(
-          (new Date(planData.expiry_date).getTime() - Date.now()) /
-            (1000 * 60 * 60 * 24)
-        )
+  } else if (planData) {
+    daysLeft = Math.max(
+      0,
+      Math.ceil(
+        (new Date(planData.expiry_date).getTime() - Date.now()) /
+          (1000 * 60 * 60 * 24)
       )
-    : 0
+    )
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F9FAFB]">
